@@ -16,7 +16,6 @@
    (shutdown :initform nil)
    (spawned :initform 0 :reader spawned-of)
    (waiting :initform 0)
-   (extra :initarg :extra :initform ())
    (workers :initform ())))
 
 (defmethod initialize-instance :after ((self thread-pool) &key)
@@ -32,34 +31,34 @@
 
 (defmethod spawn-thread ((self thread-pool))
   "Must be called with-thread-pool-lock!"
-  (with-slots (condition-variable extra lock process spawned shutdown todo
+  (with-slots (condition-variable lock process spawned shutdown todo
                trim-requested waiting workers) self
     (incf spawned)
     (aprog1
         (bt:make-thread
          (lambda ()
-           (let ((extra (mapcar #'make-instance extra)))
-             (loop with work = nil
-                   with continue = t
-                   do (with-thread-pool-lock self
-                        (loop while (zerop (queues:qsize todo))
-                              do (when (plusp trim-requested)
-                                   (decf trim-requested)
-                                   (setf continue nil)
-                                   (loop-finish))
-                                 (when shutdown
-                                   (setf continue nil)
-                                   (loop-finish))
-                                 (incf waiting)
-                                 (bt:condition-wait condition-variable lock)
-                                 (decf waiting))
-                        (when continue
-                          (setf work (queues:qpop todo))))
-                      (unless continue (loop-finish))
-                      (apply process work extra))
-             (with-thread-pool-lock self
-               (decf spawned)
-               (setf workers (delete (bt:current-thread) workers))))))
+           (loop with work = nil
+                 with continue = t
+                 with buffer = (make-buffer)
+                 do (with-thread-pool-lock self
+                      (loop while (zerop (queues:qsize todo))
+                            do (when (plusp trim-requested)
+                                 (decf trim-requested)
+                                 (setf continue nil)
+                                 (loop-finish))
+                               (when shutdown
+                                 (setf continue nil)
+                                 (loop-finish))
+                               (incf waiting)
+                               (bt:condition-wait condition-variable lock)
+                               (decf waiting))
+                      (when continue
+                        (setf work (queues:qpop todo))))
+                    (unless continue (loop-finish))
+                    (funcall process work buffer))
+           (with-thread-pool-lock self
+             (decf spawned)
+             (setf workers (delete (bt:current-thread) workers)))))
       (push it workers))))
 
 (defmethod << ((self thread-pool) work)

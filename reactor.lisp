@@ -1,7 +1,5 @@
 (in-package :unpyo)
 
-(defconstant +reactor-default-sleep-for+ 5)
-
 (defclass reactor ()
   ((server :initarg :server)
    (events)
@@ -22,43 +20,42 @@
     (setf sockets (list ready))))
 
 (defmethod run ((self reactor) &key)
-  (with-slots (app-pool events inputs mutex ready server sleep-for sockets timeouts trigger) self
+  (with-slots (app-pool events input mutex ready server sleep-for sockets timeouts trigger) self
     (unwind-protect
          (loop for cs = (io-select sockets :timeout sleep-for)
-               do (when cs
-                    (loop for c in cs
-                          do (if (= c ready)
-                                 (bt:with-lock-held (mutex)
-                                   (case (read-1 c)
-                                     (#\*
-                                      (setf sockets (nconc sockets inputs))
-                                      (setf inputs ()))
-                                     (#\c
-                                      (setf sockets (delete-if (lambda (s)
-                                                                 (when (/= s ready)
-                                                                   (close s)
-                                                                   t))
-                                                               sockets)))
-                                     (#\!
-                                      (return-from run nil))))
-                                 (progn
-                                   (when (timeout-at-of c)
-                                     (bt:with-lock-held (mutex)
-                                       (setf timeouts (delete c timeouts))))
-                                   (handler-case
-                                       (when (try-to-finish c)
-                                         (<< app-pool c)
-                                         (setf sockets (delete c sockets)))
-                                     (http-parse-error (e)
-                                       (write-400 c)
-                                       (close c)
-                                       (setf sockets (delete c sockets))
-                                       (evets-parse-error events server (env-of c) e))
-                                     (error (e)
-                                       (write-500 c)
-                                       (close c)
-                                       (setf sockets (delete c sockets))
-                                       (print e)))))))
+               do (loop for c in cs
+                        do (if (eql c ready)
+                               (bt:with-lock-held (mutex)
+                                 (case (read-1 c)
+                                   (+reactor-add-command+
+                                    (setf sockets (nconc sockets input))
+                                    (setf input ()))
+                                   (+reactor-clear-command+
+                                    (setf sockets (delete-if (lambda (s)
+                                                               (when (/= s ready)
+                                                                 (close s)
+                                                                 t))
+                                                             sockets)))
+                                   (+reactor-shutdown-command+
+                                    (return-from run nil))))
+                               (progn
+                                 (when (timeout-at-of c)
+                                   (bt:with-lock-held (mutex)
+                                     (setf timeouts (delete c timeouts))))
+                                 (handler-case
+                                     (when (try-to-finish c)
+                                       (<< app-pool c)
+                                       (setf sockets (delete c sockets)))
+                                   (http-parse-error (e)
+                                     (write-400 c)
+                                     (close c)
+                                     (setf sockets (delete c sockets))
+                                     (evets-parse-error events server (env-of c) e))
+                                   (error (e)
+                                     (write-500 c)
+                                     (close c)
+                                     (setf sockets (delete c sockets))
+                                     (print e))))))
                   (when timeouts
                     (bt:with-lock-held (mutex)
                       (let ((now (get-universal-time)))
@@ -91,13 +88,13 @@
           (setf sleep-for (if (minusp diff) 0 diff)))
         (setf sleep-for +reactor-default-sleep-for+))))
 
-(defmethod << ((self reactor) c)
-  (with-slots (inputs mutex timeouts trigger) self
+(defmethod << ((self reactor) client)
+  (with-slots (input mutex timeouts trigger) self
     (bt:with-lock-held (mutex)
-      (push c inputs)
-      (write-1 trigger #.(char-code #\*))
-      (when (timeout-at-of c)
-        (push timeouts c)
+      (push client input)
+      (write-1 trigger +reactor-add-command+)
+      (when (timeout-at-of client)
+        (push client timeouts)
         (setf timeouts (sort timeouts (lambda (x y)
                                         (<= (timeout-at-of x)
                                             (timeout-at-of y)))))
@@ -105,14 +102,9 @@
 
 (defmethod clear ((self reactor))
   (with-slots (trigger) self
-    (write-1 trigger #.(char-code #\c))))
+    (write-1 trigger +reactor-clear-command+)))
 
 (defmethod shutdown ((self reactor))
   (with-slots (thread trigger) self
-    (write-1 trigger #.(char-code #\!))
+    (write-1 trigger +reactor-shutdown-command+)
     (bt:join-thread thread)))
-
-
-
-
-

@@ -65,7 +65,8 @@ to wait until we get the first data for the request")
     (when auto-trim-time
       (auto-trim thread-pool auto-trim-time))
     (if background
-        (setf thread (bt:make-thread 'handle-servers))
+        (setf thread (bt:make-thread (lambda ()
+                                       (handle-servers self))))
         (handle-servers self))))
 
 (defmethod handle-servers ((self server))
@@ -74,23 +75,9 @@ to wait until we get the first data for the request")
          (let ((sockets `(,check ,@(ios-of binder)))
                (pool thread-pool))
            (loop while (eq status :run)
-                 do (handler-case
-                        (loop for sock in (io-select sockets)
-                              do (if (= sock check)
-                                     (when (handle-check self)
-                                       (loop-finish))
-                                     (handler-case
-                                         (let ((io (iolib.sockets:accept-connection sock :wait nil))
-                                               (env (env binder sock)))
-                                           (<< pool (make-instance 'client :io io :env env)))
-                                       (isys:syscall-error (e)
-                                         (print e)))))
-                      (isys:econnaborted (e) ;client closed the socket even before accept
-                        (print e))
-                      (error (e)
-                        (unknow-error events self e "Listen loop"))))
+                 do (handle-servers-loop self pool check sockets))
            (when (member status '(:stop :restart))
-             (ograceful-shutdown self))
+             (graceful-shutdown self))
            (when (eq status :restart)
              (clear reactor))
            (shutdown reactor))
@@ -98,6 +85,26 @@ to wait until we get the first data for the request")
       (isys:close notify)
       (when (and (not (eq status :restart)) own-binder)
         (close binder)))))
+
+(defun handle-servers-loop (server pool check sockets)
+  (with-slots (binder events) server
+    (handler-case
+        (loop for sock in (io-select sockets)
+              do (if (eql sock check)
+                     (when (handle-check server)
+                       (loop-finish))
+                     (handler-case
+                         (let ((io (iolib.sockets:accept-connection sock :wait nil))
+                               (env (env binder sock)))
+                           (<< pool (make-instance 'client :io io :env env)))
+                       (isys:syscall-error (e)
+                         ;; ignore error
+                         (print e)))))
+      (isys:econnaborted (e) ;client closed the socket even before accept
+        (print e))
+      #+ぬぬも
+      (error (e)
+        (unknow-error events server e "Listen loop")))))
 
 (defmethod handle-check ((self server))
   (with-slots (check status) self
@@ -130,7 +137,7 @@ to wait until we get the first data for the request")
                                (unless (reset client :fast-check (eq status :run))
                                  (setf close-socket nil)
                                  (set-timeout client persistent-timeout)
-                                 (add reactor clinet)
+                                 (<< reactor client)
                                  (loop-finish)))))
              (connection-error (e)
                (print e))
@@ -144,7 +151,7 @@ to wait until we get the first data for the request")
       (handler-case
           (when close-socket
             (close client))
-        ((or io-error sytem-call-error) (e)
+        ((or io-error sytem-call-error) ()
           ;; Already closed
           )
         (error (e)
@@ -173,7 +180,7 @@ to wait until we get the first data for the request")
       "443"
       "80"))
 
-(defmethod handle-request ((self server) client lines)
+(defmethod handle-request ((self server) client buffer)
   (with-slots (app events) self
     (let* ((env (env-of client))
            (client-socket (io-of client))
@@ -188,7 +195,6 @@ to wait until we get the first data for the request")
            content-length
            allow-chunked
            include-keepalive-header
-           (lines (make-array 1024 :adjustable t :fill-pointer 0))
            response-hijack
            chunked)
       (normalize-env self env client-socket)
@@ -225,13 +231,11 @@ to wait until we get the first data for the request")
                    (setf keep-alive (not (equal (gethash "HTTP_CONNECTION" env) "close")))
                    (setf include-keepalive-header nil)
                    (if (= status 200)
-                       (vector-push-extend +http/1.1-200+ lines)
+                       (bwrite buffer +http/1.1-200+)
                        (progn
-                         (vector-push-extend "HTTP/1.1 " lines)
-                         (vector-push-extend (princ-to-string status) lines)
-                         (vector-push-extend " " lines)
-                         (vector-push-extend (gethash status *http-status-codes*) lines)
-                         (vector-push-extend +crlf+ lines)
+                         (bwrite buffer "HTTP/1.1 " status " "
+                                 (gethash status *http-status-codes*)
+                                 +crlf+)
                          (setf no-body (or no-body
                                            (< status 200)
                                            (gethash status *status-with-no-entity-body*))))))
@@ -241,13 +245,11 @@ to wait until we get the first data for the request")
                    (setf keep-alive (equal "Keep-Alive" (gethash "HTTP_CONNECTION" env)))
                    (setf include-keepalive-header keep-alive)
                    (if (= status 200)
-                       (vector-push-extend +http/1.0-200+ lines)
+                       (bwrite buffer +http/1.0-200+)
                        (progn
-                         (vector-push-extend "HTTP/1.0 " lines)
-                         (vector-push-extend (princ-to-string status) lines)
-                         (vector-push-extend " " lines)
-                         (vector-push-extend (gethash status *http-status-codes*) lines)
-                         (vector-push-extend +crlf+ lines)
+                         (bwrite buffer "HTTP/1.0 " status " "
+                                 (gethash status *http-status-codes*)
+                                 +crlf+)
                          (setf no-body (or no-body
                                            (< status 200)
                                            (gethash status *status-with-no-entity-body*)))))))
@@ -263,36 +265,31 @@ to wait until we get the first data for the request")
                                (setf allow-chunked nil)
                                (setf content-length nil))
                              (loop for v in (ppcre:split +newline+ v)
-                                   do (vector-push-extend k lines)
-                                      (vector-push-extend +colon+ lines)
-                                      (vector-push-extend v lines)
-                                      (vector-push-extend +crlf+ lines)))))
+                                   do (bwrite buffer k +colon+ v +crlf+)))))
 
              (when no-body
-               (vector-push-extend +crlf+ lines)
-               (fast-write client-socket lines)
+               (bwrite +crlf+ buffer)
+               (fast-write client-socket buffer)
                (return-from handle-request keep-alive))
 
              (cond (include-keepalive-header
-                    (vector-push-extend #.(concatenate 'string "Connection: Keep-Alive" +crlf+) lines))
+                    (bwrite buffer #.(concatenate 'string "Connection: Keep-Alive" +crlf+)))
                    ((not keep-alive)
-                    (vector-push-extend #.(concatenate 'string "Connection: close" +crlf+) lines)))
+                    (bwrite buffer #.(concatenate 'string "Connection: close" +crlf+))))
 
              (unless response-hijack
                (if content-length
                    (progn
-                     (vector-push-extend "Content-Length: " lines)
-                     (vector-push-extend content-length lines)
-                     (vector-push-extend +crlf+ lines)
+                     (bwrite buffer "Content-Length: " content-length +crlf+)
                      (setf chunked nil))
                    (progn
-                     (vector-push-extend
-                      #.(concatenate 'string "Transfer-Encoding: chunked" +crlf+) lines)
+                     (bwrite buffer
+                             #.(concatenate 'string "Transfer-Encoding: chunked" +crlf+))
                      (setf chunked t))))
 
-             (vector-push-extend +crlf+ lines)
+             (bwrite buffer +crlf+)
 
-             (fast-write client-socket lines)
+             (fast-write client-socket buffer)
 
              (when response-hijack
                (funcall response-hijack client-socket)
@@ -338,3 +335,20 @@ to wait until we get the first data for the request")
 (defmethod begin-restart ((self server))
   (with-slots (notify) self
     (write-1 notify +restart-command+)))
+
+
+(defun fast-write (fd buffer)
+  (flet ((w (pointer length)
+           (loop
+             (handler-case
+                 (return (isys:write fd pointer length))
+               (isys:ewouldblock ()
+                 (wait-for-write fd :timeout 1000))))))
+    (let* ((vector (fast-io::finish-output-buffer buffer)))
+      (unwind-protect
+           (loop with length = (length vector)
+                 for pointer = (static-vectors:static-vector-pointer vector)
+                   then (static-vectors::inc-pointer pointer write-size)
+                 for write-size = (w pointer length)
+                 while (plusp (decf length write-size)))
+        (static-vectors:free-static-vector vector)))))

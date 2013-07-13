@@ -34,7 +34,7 @@
   (with-open-stream (epoll-fd (isys:epoll-create 1))
     (let ((hash (make-hash-table)))
       (loop for socket in sockets
-            for fd = (iolib.streams:fd-of socket)
+            for fd = (fd-of socket)
             do (%epoll-ctl fd epoll-fd isys:epoll-ctl-add isys:epollin isys:epollpri)
                (setf (gethash fd hash) socket))
       (cffi:with-foreign-object (events '(:struct isys:epoll-event) iomux::+epoll-max-events+)
@@ -44,12 +44,23 @@
                            (isys:eintr ()
                              (warn "epoll-wait EINTR")
                              0))))
-          (loop for i below ready-fds
-                for event = (cffi:mem-aref events '(:struct isys:epoll-event) i)
-                for event-data = (cffi:foreign-slot-value
-                                  event '(:struct isys:epoll-event) 'isys:data)
-                for fd = (cffi:foreign-slot-value event-data '(:union isys:epoll-data) 'isys:fd)
-                collect (gethash fd hash)))))))
+          (macrolet ((epoll-slot (slot-name)
+                       `(cffi:foreign-slot-value (cffi:mem-aref events 'isys:epoll-event i)
+                                            'isys:epoll-event ',slot-name)))
+            (loop :for i :below ready-fds
+                  :for fd := (cffi:foreign-slot-value (epoll-slot isys:data) 'isys:epoll-data 'isys:fd)
+                  :collect (gethash fd hash))))))))
+
+(defun wait-for-write (fd &key (timeout -1))
+  (with-open-stream (epoll-fd (isys:epoll-create 1))
+    (%epoll-ctl fd epoll-fd isys:epoll-ctl-add isys:epollout isys:epollpri)
+    (cffi:with-foreign-object (events '(:struct isys:epoll-event) 1)
+      (isys:bzero events isys:size-of-epoll-event)
+      (handler-case
+          (isys:epoll-wait epoll-fd events 1 timeout)
+        (isys:eintr ()
+          (warn "epoll-wait EINTR")
+          0)))))
 
 (defmethod read-1 (fd)
   (static-vectors:with-static-vector (vec 1 :initial-element 0)
@@ -62,11 +73,11 @@
 
 (defun cork (socket)
   (iolib.sockets::set-socket-option-int
-   (iolib.streams:fd-of socket) iolib.sockets::ipproto-tcp iolib.sockets::tcp-cork 1))
+   (fd-of socket) iolib.sockets::ipproto-tcp iolib.sockets::tcp-cork 1))
 
 (defun uncork (socket)
   (iolib.sockets::set-socket-option-int
-   (iolib.streams:fd-of socket) iolib.sockets::ipproto-tcp iolib.sockets::tcp-cork 0))
+   (fd-of socket) iolib.sockets::ipproto-tcp iolib.sockets::tcp-cork 0))
 
 (defmacro with-cork ((socket) &body body)
   (alexandria:once-only (socket)
@@ -75,3 +86,9 @@
        (unwind-protect (progn ,@body)
          (uncork ,socket)))))
 
+(defmethod close ((fd fixnum) &key abort)
+  (declare (ignore abort))
+  (isys:close fd))
+
+(defun string-to-octets (string)
+  (babel:string-to-octets string))

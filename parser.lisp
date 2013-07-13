@@ -2,12 +2,12 @@
 
 (defvar *parser* nil)
 
-(defclass parser ()
+(defclass http-parser ()
   ((parse-function :initform #'parse-method)
    (finished :initform nil :reader finished-p)
    (body :initform nil :reader body-of)))
 
-(defmethod execute ((self parser) env buffer start end)
+(defmethod execute ((self http-parser) env buffer start &optional (end (length buffer)))
   (let ((*parser* self))
     (with-slots (finished parse-function) self
       (prog ()

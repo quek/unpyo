@@ -6,14 +6,17 @@
   :author "TAHARA Yoshinori <read.eval.print@gmail.com>"
   :license "Specify license here"
   :components ((:file "package")
+               (:file "type")
                (:file "util")
                (:file "protocol")
                (:file "condition")
                (:file "const")
+               (:file "buffer")
                (:file "thread-pool")
                (:file "env")
                (:file "events")
                (:file "reactor")
+               (:file "parser")
                (:file "client")
                (:file "binder")
                (:file "server"))

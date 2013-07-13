@@ -8,6 +8,12 @@
 (defconstant +halt-command+ (char-code #\!))
 (defconstant +restart-command+ (char-code #\R))
 
+(defconstant +reactor-add-command+ (char-code #\*))
+(defconstant +reactor-clear-command+ (char-code #\c))
+(defconstant +reactor-shutdown-command+ (char-code #\!))
+(defconstant +reactor-default-sleep-for+ 5000 "milli seconds")
+
+
 (defconstant +max-header+  (* 1024 (+ 80 32))
   "This is the maximum header that is allowed before a client is booted.
 The parser detects this, but we'd also like to do this as well.")

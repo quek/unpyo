@@ -24,7 +24,7 @@
   (flet ((c (x)
            (close x :abort abort)))
     (mapc #'c (ios-of self))
-    (mapc #'c (slot-value self 'unix-paths))))
+    (mapc #'delete-file (slot-value self 'unix-paths))))
 
 (defmethod env ((self binder) sock)
   (gethash sock (slot-value self 'envs) (slot-value self 'proto-env)))
@@ -78,7 +78,7 @@
                (push (cons bind io) listeners)))
     (loop for (bind . fd) in inherited-fds
           for uri = (puri:parse-uri bind)
-          do (close fd)
+          do (isys:close fd)
              (when (eq :unix (puri:uri-scheme uri))
                (delete-file (concatenate 'string (puri:uri-host uri) (puri:uri-path uri)))))))
 
@@ -114,6 +114,7 @@
              (when (probe-file path)
                (handler-case
                    (iolib.sockets:make-socket :address-family :local
+                                              :connect :passive
                                               :local-filename path)
                  (isys:syscall-error ()
                    (delete-file path))
@@ -121,6 +122,7 @@
                    (close old)
                    (error "There is already a server bound to: ~a" path))))
              (aprog1 (iolib.sockets:make-socket :address-family :local
+                                                :connect :passive
                                                 :local-filename path)
                (push it ios)))
         (isys:umask old-mask)))))
