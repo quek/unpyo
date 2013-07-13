@@ -7,6 +7,13 @@
    (finished :initform nil :reader finished-p)
    (body :initform nil :reader body-of)))
 
+(defmethod reset ((self http-parser) &key fast-check)
+  (declare (ignore fast-check))
+  (with-slots (parse-function finished body) self
+    (setf parse-function #'parse-method
+          finished nil
+          body nil)))
+
 (defmethod execute ((self http-parser) env buffer start &optional (end (length buffer)))
   (let ((*parser* self))
     (with-slots (finished parse-function) self
@@ -51,7 +58,8 @@
 (defun parse-protocol (buffer start end env)
   (aif (position #x0d buffer :start start :end end)
        (let ((protocol (babel:octets-to-string buffer :start start :end it)))
-         (setf (gethash "SERVER_PROTOCOL" env) protocol)
+         (setf (gethash "SERVER_PROTOCOL" env) protocol
+               (gethash "HTTP_VERSION" env) protocol)
          (parse-header buffer (1+ it) end env))
        (values nil start #'parse-protocol)))
 

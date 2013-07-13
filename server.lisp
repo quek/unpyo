@@ -10,12 +10,13 @@
    (binder :initarg :binder)
    (own-binder :initform t)
    (first-data-timeout :initform 30
-                       :documentation "The default number of seconds
-to wait until we get the first data for the request")
+                       :documentation "The default number of seconds to wait until we get the first data for the request")
    (reactor)
    (min-threads :initarg :min-thread :initform 1)
    (max-threads :initarg :max-thread :initform 2)
    (auto-trim-time :initform 1)
+   (persistent-timeout :initform 20
+                       :documentation "The number of seconds for another request within a persistent session.")
    (thread :initform nil)))
 
 (defmethod initialize-instance :after ((self server) &key)
@@ -66,7 +67,8 @@ to wait until we get the first data for the request")
       (auto-trim thread-pool auto-trim-time))
     (if background
         (setf thread (bt:make-thread (lambda ()
-                                       (handle-servers self))))
+                                       (handle-servers self))
+                                     :name (format nil "unpyo serevr ~a" self)))
         (handle-servers self))))
 
 (defmethod handle-servers ((self server))
@@ -94,9 +96,8 @@ to wait until we get the first data for the request")
                      (when (handle-check server)
                        (loop-finish))
                      (handler-case
-                         (let ((io (iolib.sockets:accept-connection sock :wait nil))
-                               (env (env binder sock)))
-                           (<< pool (make-instance 'client :io io :env env)))
+                         (aif (iolib.sockets:accept-connection sock :wait nil)
+                              (<< pool (make-instance 'client :io it :env (env binder sock))))
                        (isys:syscall-error (e)
                          ;; ignore error
                          (print e)))))
@@ -144,6 +145,7 @@ to wait until we get the first data for the request")
              (http-parse-error (e)
                (write-400 client)
                (evets-parse-error events self (env-of client) e))
+             #+ぬぬも
              (error (e)
                (write-500 client)
                (unknow-error events self e "Read"))))
@@ -212,7 +214,8 @@ to wait until we get the first data for the request")
                          (call app env))
                    (when (hijacked-p client)
                      (return-from handle-request :async))
-                   (setf status (parse-integer status))
+                   (when (stringp status)
+                     (setf status (parse-integer status)))
                    (when (= status -1)
                      (unless (and (null headers) (null res-body))
                        (error "async response must have empty headers and body"))
@@ -224,8 +227,7 @@ to wait until we get the first data for the request")
              (when (and (listp res-body)
                         (= 1 (length res-body)))
                (setf content-length (bytesize (car res-body))))
-
-             (if (equal "HTTP/1.1" (gethash "HTTP_VERSION" env))
+             (if (equal "HTTP/1.1" (env env "HTTP_VERSION"))
                  (progn                 ;HTTP/1.1
                    (setf allow-chunked t)
                    (setf keep-alive (not (equal (gethash "HTTP_CONNECTION" env) "close")))
@@ -295,19 +297,19 @@ to wait until we get the first data for the request")
                (funcall response-hijack client-socket)
                (return-from handle-request :async))
 
-             (loop for part in res-body
-                   do (if chunked
-                          (progn
-                            (syswrite client-socket (format nil "~x" (bytesize part)))
-                            (syswrite client-socket +crlf+)
-                            (fast-write client-socket part)
-                            (syswrite client-socket +crlf+))
-                          (fast-write client-socket part))
-                      (flush client-socket))
 
+             (loop for part in res-body
+                   do (with-buffer (buf)
+                        (if chunked
+                            (progn
+                              (bwrite buf (format nil "~x" (bytesize part))
+                                      +crlf+ part +crlf+))
+                            (bwrite buf part))
+                        (fast-write client-socket buf)))
              (when chunked
-               (syswrite client-socket #.(concatenate 'string "0" +crlf+ +crlf+))
-               (flush client-socket)))
+               (with-buffer (buf)
+                 (bwrite buf #.(concatenate 'string "0" +crlf+ +crlf+))
+                 (fast-write client-socket buf))))
         ;; cleanup forms of unwind-protect
         (close body)
         (ignore-errors (close res-body))
@@ -337,14 +339,15 @@ to wait until we get the first data for the request")
     (write-1 notify +restart-command+)))
 
 
-(defun fast-write (fd buffer)
-  (flet ((w (pointer length)
-           (loop
-             (handler-case
-                 (return (isys:write fd pointer length))
-               (isys:ewouldblock ()
-                 (wait-for-write fd :timeout 1000))))))
-    (let* ((vector (fast-io::finish-output-buffer buffer)))
+(defun fast-write (socket buffer)
+  (let ((fd (fd-of socket))
+        (vector (fast-io::finish-output-buffer buffer)))
+    (flet ((w (pointer length)
+             (loop
+               (handler-case
+                   (return (isys:write fd pointer length))
+                 (isys:ewouldblock ()
+                   (iomux:wait-until-fd-ready fd :output 1 nil))))))
       (unwind-protect
            (loop with length = (length vector)
                  for pointer = (static-vectors:static-vector-pointer vector)

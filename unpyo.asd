@@ -19,7 +19,8 @@
                (:file "parser")
                (:file "client")
                (:file "binder")
-               (:file "server"))
+               (:file "server")
+               (:file "app"))
   :depends-on (:anaphora
                :local-time
                :trivial-backtrace

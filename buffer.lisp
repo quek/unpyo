@@ -24,3 +24,7 @@
 
 (defun buffer-to-vector (buffer)
   (fast-io::finish-output-buffer buffer))
+
+(defmacro with-buffer ((buffer) &body body)
+  `(let ((,buffer (make-buffer)))
+     ,@body))

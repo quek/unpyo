@@ -12,7 +12,7 @@
    (body-remain)
    (buffer :initform nil)
    (timeout-at :initform nil :reader timeout-at-of)
-   (request-served :initform 0)
+   (requests-served :initform 0)
    (hijacked :initform nil :reader hijacked-p)))
 
 (defmethod initialize-instance :after ((self client) &key)
@@ -23,6 +23,7 @@
   (with-slots (io) self
     (fd-of io)))
 
+#+nil
 (defmethod call ((self client))
   (with-slots (io hijacked) self
     (setf hijacked t)

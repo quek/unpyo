@@ -2,7 +2,7 @@
 
 (alexandria:define-constant +unpyo-version+ "0.0.0" :test 'equal)
 
-(defconstant +fast-track-ka-timeout+ 0.2)
+(defconstant +fast-track-ka-timeout+ 200 "milli seconds")
 
 (defconstant +stop-command+ (char-code #\?))
 (defconstant +halt-command+ (char-code #\!))
