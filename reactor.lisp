@@ -22,48 +22,56 @@
 (defmethod run ((self reactor) &key)
   (with-slots (app-pool events input mutex ready server sleep-for sockets timeouts trigger) self
     (unwind-protect
-         (loop for cs = (io-select sockets :timeout sleep-for)
-               do (loop for c in cs
-                        do (if (eql c ready)
-                               (bt:with-lock-held (mutex)
-                                 (case (read-1 c)
-                                   (+reactor-add-command+
-                                    (setf sockets (nconc sockets input))
-                                    (setf input ()))
-                                   (+reactor-clear-command+
-                                    (setf sockets (delete-if (lambda (s)
-                                                               (when (/= s ready)
-                                                                 (close s)
-                                                                 t))
-                                                             sockets)))
-                                   (+reactor-shutdown-command+
-                                    (return-from run nil))))
-                               (progn
-                                 (when (timeout-at-of c)
-                                   (bt:with-lock-held (mutex)
-                                     (setf timeouts (delete c timeouts))))
-                                 (handler-case
-                                     (when (try-to-finish c)
-                                       (<< app-pool c)
-                                       (setf sockets (delete c sockets)))
-                                   (http-parse-error (e)
-                                     (write-400 c)
-                                     (close c)
-                                     (setf sockets (delete c sockets))
-                                     (evets-parse-error events server (env-of c) e))
-                                   (error (e)
-                                     (write-500 c)
-                                     (close c)
-                                     (setf sockets (delete c sockets))
-                                     (print e))))))
-                  (when timeouts
-                    (bt:with-lock-held (mutex)
-                      (let ((now (get-universal-time)))
-                        (loop while (and timeouts (< (timeout-at-of (car timeouts)) now))
-                              for c = (pop timeouts)
-                              do (setf sockets (delete c sockets))
-                                 (close c)))
-                      (calculate-sleep self))))
+         (loop for cs = (io-select sockets :timeout sleep-for) do
+           (print (list cs sockets))
+           (loop for c in cs do
+             (if (eql c ready)
+                 (bt:with-lock-held (mutex)
+                   (let ((command (read-1 c)))
+                     (dd "reactor read command ~a" command)
+                     (case command
+                       (#.+reactor-add-command+
+                        (print '+reactor-add-command+)
+                        (setf sockets (nconc sockets input))
+                        (setf input ()))
+                       (#.+reactor-clear-command+
+                        (print '+reactor-clear-command+)
+                        (setf sockets (delete-if (lambda (s)
+                                                   (unless (eql s ready)
+                                                     (close s)
+                                                     t))
+                                                 sockets)))
+                       (#.+reactor-shutdown-command+
+                        (print '+reactor-shutdown-command+)
+                        (return-from run nil)))) )
+                 (progn
+                   (when (timeout-at-of c)
+                     (bt:with-lock-held (mutex)
+                       (setf timeouts (delete c timeouts))))
+                   (print 'try-to-finish--from-reactor-run)
+                   (handler-case
+                       (when (try-to-finish c)
+                         (dd "add ~a to thread pool from reactor" c)
+                         (<< app-pool c)
+                         (setf sockets (delete c sockets)))
+                     (http-parse-error (e)
+                       (setf sockets (delete c sockets))
+                       (write-400 c)
+                       (close c)
+                       (evets-parse-error events server (env-of c) e))
+                     (error (e)
+                       (setf sockets (delete c sockets))
+                       (write-500 c)
+                       (close c)
+                       (print e))))))
+           (when timeouts
+             (bt:with-lock-held (mutex)
+               (loop with now = (monotonic-time)
+                     while (and timeouts (< (timeout-at-of (car timeouts)) now))
+                     for c = (pop timeouts)
+                     do (setf sockets (delete c sockets))
+                        (close c))
+               (calculate-sleep self))))
       (isys:close trigger)
       (isys:close ready))))
 
@@ -84,7 +92,7 @@
 (defmethod calculate-sleep ((self reactor))
   (with-slots (timeouts sleep-for) self
     (if timeouts
-        (let ((diff (- (timeout-at-of (car timeouts)) (get-universal-time))))
+        (let ((diff (- (timeout-at-of (car timeouts)) (monotonic-time))))
           (setf sleep-for (if (minusp diff) 0 diff)))
         (setf sleep-for +reactor-default-sleep-for+))))
 

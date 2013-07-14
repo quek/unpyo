@@ -16,7 +16,8 @@
    (shutdown :initform nil)
    (spawned :initform 0 :reader spawned-of)
    (waiting :initform 0)
-   (workers :initform ())))
+   (workers :initform ())
+   (server :initarg :server)))
 
 (defmethod initialize-instance :after ((self thread-pool) &key)
   (with-slots (min) self
@@ -31,35 +32,59 @@
 
 (defmethod spawn-thread ((self thread-pool))
   "Must be called with-thread-pool-lock!"
-  (with-slots (condition-variable lock process spawned shutdown todo
+  (with-slots (condition-variable lock server spawned shutdown todo
                trim-requested waiting workers) self
     (incf spawned)
     (aprog1
         (bt:make-thread
-         (lambda ()
-           (loop with work = nil
-                 with continue = t
-                 with buffer = (make-buffer)
-                 do (with-thread-pool-lock self
-                      (loop while (zerop (queues:qsize todo))
-                            do (when (plusp trim-requested)
-                                 (decf trim-requested)
-                                 (setf continue nil)
-                                 (loop-finish))
-                               (when shutdown
-                                 (setf continue nil)
-                                 (loop-finish))
-                               (incf waiting)
-                               (bt:condition-wait condition-variable lock)
-                               (decf waiting))
-                      (when continue
-                        (setf work (queues:qpop todo))))
-                    (unless continue (loop-finish))
-                    (funcall process work buffer))
-           (with-thread-pool-lock self
-             (decf spawned)
-             (setf workers (delete (bt:current-thread) workers)))))
+            (lambda ()
+              (loop with client = nil
+                    with continue = t
+                    with buffer = (make-buffer)
+                    do (with-thread-pool-lock self
+                         (loop while (zerop (queues:qsize todo))
+                               do (when (plusp trim-requested)
+                                    (decf trim-requested)
+                                    (setf continue nil)
+                                    (loop-finish))
+                                  (when shutdown
+                                    (setf continue nil)
+                                    (loop-finish))
+                                  (incf waiting)
+                                  (bt:condition-wait condition-variable lock)
+                                  (decf waiting))
+                         (when continue
+                           (setf client (queues:qpop todo))))
+                       (unless continue (loop-finish))
+                       (cook-client self client buffer))
+              (with-thread-pool-lock self
+                (decf spawned)
+                (setf workers (delete (bt:current-thread) workers))))
+            :name (format nil "unpyo thread pool ~a" self))
       (push it workers))))
+
+(defmethod cook-client ((self thread-pool) client buffer)
+  (with-slots (server) self
+    (with-slots (events reactor) server
+      (print 'eagerly-finish--from-thread-pool-cook-client)
+      (handler-case
+          (eagerly-finish client)
+        (http-parse-error (e)
+          (write-400 client)
+          (close client)
+          (evets-parse-error events self (env-of client) e))
+        (connection-error (e)
+          (print e)
+          (close client))
+        (:no-error (process-now)
+          (if process-now
+              (process-client server client buffer)
+              (progn
+                (print 'not-precss-now)
+                (set-timeout client (slot-value server 'first-data-timeout))
+                (dd "add ~a to reactor from cook-client" client)
+                (<< reactor client))))))))
+
 
 (defmethod << ((self thread-pool) work)
   (with-thread-pool-lock self

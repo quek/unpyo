@@ -2,7 +2,7 @@
 
 (alexandria:define-constant +unpyo-version+ "0.0.0" :test 'equal)
 
-(defconstant +fast-track-ka-timeout+ 200 "milli seconds")
+(defconstant +fast-track-ka-timeout+ 0.2 "seconds")
 
 (defconstant +stop-command+ (char-code #\?))
 (defconstant +halt-command+ (char-code #\!))
@@ -11,7 +11,7 @@
 (defconstant +reactor-add-command+ (char-code #\*))
 (defconstant +reactor-clear-command+ (char-code #\c))
 (defconstant +reactor-shutdown-command+ (char-code #\!))
-(defconstant +reactor-default-sleep-for+ 5000 "milli seconds")
+(defconstant +reactor-default-sleep-for+ 5 "seconds")
 
 
 (defconstant +max-header+  (* 1024 (+ 80 32))

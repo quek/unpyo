@@ -40,27 +40,10 @@
   (with-slots (auto-trim-time events reactor status thread thread-pool) self
     (setf status :run)
     (setf thread-pool
-          (make-instance
-           'thread-pool
-           :min (slot-value self 'min-threads)
-           :max (slot-value self 'max-threads)
-           :process (lambda (client buffer)
-                      (let ((process-now nil))
-                        (handler-case
-                            (setf process-now (eagerly-finish client))
-                          (http-parse-error (e)
-                            (write-400 client)
-                            (close client)
-                            (evets-parse-error events self (env-of client) e))
-                          (connection-error (e)
-                            (print e)
-                            (close client))
-                          (:no-error (process-now)
-                            (if process-now
-                                (process-client self client buffer)
-                                (progn
-                                  (set-timeout client (slot-value self 'first-data-timeout))
-                                  (<< reactor client)))))))))
+          (make-instance 'thread-pool
+                         :min (slot-value self 'min-threads)
+                         :max (slot-value self 'max-threads)
+                         :server self))
     (setf reactor (make-instance 'reactor :server self :app-pool thread-pool))
     (run-in-thread reactor)
     (when auto-trim-time
@@ -96,8 +79,10 @@
                      (when (handle-check server)
                        (loop-finish))
                      (handler-case
-                         (aif (iolib.sockets:accept-connection sock :wait nil)
-                              (<< pool (make-instance 'client :io it :env (env binder sock))))
+                         (awhen (iolib.sockets:accept-connection sock :wait nil)
+                           (let ((client (make-instance 'client :io it :env (env binder sock))))
+                             (dd "add ~a to thread pool from server" client)
+                             (<< pool client)))
                        (isys:syscall-error (e)
                          ;; ignore error
                          (print e)))))
@@ -109,20 +94,21 @@
 
 (defmethod handle-check ((self server))
   (with-slots (check status) self
-    (case (read-char check)
-     (+stop-command+
-      (setf status :stop)
-      t)
-     (+halt-command
-      (setf status :halt)
-      t)
-     (+restart-command+
-      (setf status :restart)
-      t)
-     (t
-      nil))))
+    (case (read-1 check)
+      (#.+stop-command+
+       (setf status :stop)
+       t)
+      (#.+halt-command+
+       (setf status :halt)
+       t)
+      (#.+restart-command+
+       (setf status :restart)
+       t)
+      (t
+       nil))))
 
 (defmethod process-client ((self server) client buffer)
+  (print 'process-client)
   (with-slots (events persistent-timeout reactor status) self
     (let ((close-socket t))
       (unwind-protect
@@ -138,6 +124,7 @@
                                (unless (reset client :fast-check (eq status :run))
                                  (setf close-socket nil)
                                  (set-timeout client persistent-timeout)
+                                 (dd "add ~a to reactor from server process-client" client)
                                  (<< reactor client)
                                  (loop-finish)))))
              (connection-error (e)
@@ -183,6 +170,7 @@
       "80"))
 
 (defmethod handle-request ((self server) client buffer)
+  (print 'handle-request)
   (with-slots (app events) self
     (let* ((env (env-of client))
            (client-socket (io-of client))
@@ -205,7 +193,7 @@
       (setf (gethash +hijack+ env) client-socket)
       (setf (gethash "unpyo.input" env) body)
       (setf (gethash "unpyo.url_scheme" env) (if (gethash "HTTPS" env) "https" "http"))
-      (setf (gethash "unpyo..after_reply" env) after-reply)
+      (setf (gethash "unpyo.after_reply" env) after-reply)
       (unwind-protect
            (with-cork (client-socket)
              (handler-case
@@ -224,8 +212,7 @@
                  (unknow-error events self e "app")
                  (setf (values status headers res-body) (lowlevel-error self))))
 
-             (when (and (listp res-body)
-                        (= 1 (length res-body)))
+             (when (and (listp res-body) (null (cdr res-body)))
                (setf content-length (bytesize (car res-body))))
              (if (equal "HTTP/1.1" (env env "HTTP_VERSION"))
                  (progn                 ;HTTP/1.1
@@ -345,8 +332,11 @@
     (flet ((w (pointer length)
              (loop
                (handler-case
-                   (return (isys:write fd pointer length))
+                   (progn
+                     (print 'fast-write)
+                     (return (isys:write fd pointer length)))
                  (isys:ewouldblock ()
+                   (print 'fast-write-ewouldblock)
                    (iomux:wait-until-fd-ready fd :output 1 nil))))))
       (unwind-protect
            (loop with length = (length vector)

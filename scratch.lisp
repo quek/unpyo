@@ -27,8 +27,7 @@
   (sleep 0.1)
   (loop for i = (read-line s nil)
         while i
-        do (print i))
-  (print s))
+        do (write-line i)))
 
 (iolib.sockets:with-open-socket (s :remote-host "localhost" :remote-port 7779)
   (format s "GET / HTTP/1.1~aHost: localhost~a~a" +crlf+ +crlf+ +crlf+)
@@ -36,5 +35,4 @@
   (sleep 0.1)
   (loop for c = (read-char-no-hang s)
         while c
-        do (write-char c))
-  (print s))
+        do (write-char c)))

@@ -8,7 +8,7 @@
 
 (defun map-env (function)
   (mapc (lambda (name=value)
-          (multiple-value-call function (split-one #\= name=value)))
+          (multiple-value-call function (split-once #\= name=value)))
         (sb-ext:posix-environ)))
 
 
@@ -30,7 +30,7 @@
 (defun bytesize (string)
   (babel:string-size-in-octets string))
 
-(defun io-select (sockets &key (timeout -1))
+(defun io-select (sockets &key timeout)
   (with-open-stream (epoll-fd (isys:epoll-create 1))
     (let ((hash (make-hash-table)))
       (loop for socket in sockets
@@ -39,32 +39,45 @@
                (setf (gethash fd hash) socket))
       (cffi:with-foreign-object (events '(:struct isys:epoll-event) iomux::+epoll-max-events+)
         (isys:bzero events (* iomux::+epoll-max-events+ isys:size-of-epoll-event))
-        (let ((ready-fds (handler-case
-                             (isys:epoll-wait epoll-fd events iomux::+epoll-max-events+ timeout)
-                           (isys:eintr ()
-                             (warn "epoll-wait EINTR")
-                             0))))
+        (let ((ready-fds
+                (isys:repeat-upon-condition-decreasing-timeout
+                    ((isys:eintr) tmp-timeout timeout)
+                  (isys:epoll-wait epoll-fd events iomux::+epoll-max-events+
+                                   (iomux::timeout->milliseconds tmp-timeout)))))
           (macrolet ((epoll-slot (slot-name)
                        `(cffi:foreign-slot-value (cffi:mem-aref events 'isys:epoll-event i)
-                                            'isys:epoll-event ',slot-name)))
-            (loop :for i :below ready-fds
-                  :for fd := (cffi:foreign-slot-value (epoll-slot isys:data) 'isys:epoll-data 'isys:fd)
-                  :collect (gethash fd hash))))))))
+                                                 'isys:epoll-event ',slot-name)))
+            (loop for i below ready-fds
+                  for fd = (cffi:foreign-slot-value (epoll-slot isys:data) 'isys:epoll-data 'isys:fd)
+                  for event-mask = (epoll-slot isys:events)
+                  do (dd "event-mask ~a" event-mask)
+                  when (logtest event-mask isys:epollhup)
+                    do (dd "epollhup ~a" (gethash fd hash))
+                  collect (gethash fd hash))))))))
 
-(defun wait-for-write (fd &key (timeout -1))
-  (with-open-stream (epoll-fd (isys:epoll-create 1))
-    (%epoll-ctl fd epoll-fd isys:epoll-ctl-add isys:epollout isys:epollpri)
-    (cffi:with-foreign-object (events '(:struct isys:epoll-event) 1)
-      (isys:bzero events isys:size-of-epoll-event)
-      (handler-case
-          (isys:epoll-wait epoll-fd events 1 timeout)
-        (isys:eintr ()
-          (warn "epoll-wait EINTR")
-          0)))))
+#+nil
+(defun io-select (sockets &key timeout)
+  (let ((result ()))
+    (iomux:with-event-base (event-base)
+      (loop for socket in sockets
+            do (iomux:set-io-handler event-base (fd-of socket)
+                                     :read (let ((socket socket))
+                                             (lambda (fd event-type errorp)
+                                               (declare (ignorable fd event-type))
+                                               (dd "io-select ~a ~a ~a" fd event-type errorp)
+                                               (unless errorp
+                                                 (push socket result))))))
+      (iomux:event-dispatch event-base :one-shot t :timeout timeout))
+    result))
+
+(defun sysread (fd buffer-porinter buffer-size)
+  (aprog1 (isys:read fd buffer-porinter buffer-size)
+    (when (zerop it)
+      (error 'end-of-file))))
 
 (defmethod read-1 (fd)
   (static-vectors:with-static-vector (vec 1 :initial-element 0)
-    (isys:read fd (static-vectors:static-vector-pointer vec) 1)
+    (sysread fd (static-vectors:static-vector-pointer vec) 1)
     (aref vec 0)))
 
 (defmethod write-1 (fd byte)
@@ -72,12 +85,10 @@
     (isys:write fd (static-vectors:static-vector-pointer vec) 1)))
 
 (defun cork (socket)
-  (iolib.sockets::set-socket-option-int
-   (fd-of socket) iolib.sockets::ipproto-tcp iolib.sockets::tcp-cork 1))
+  (setf (iolib.sockets:socket-option socket :tcp-cork) t))
 
 (defun uncork (socket)
-  (iolib.sockets::set-socket-option-int
-   (fd-of socket) iolib.sockets::ipproto-tcp iolib.sockets::tcp-cork 0))
+  (setf (iolib.sockets:socket-option socket :tcp-cork) nil))
 
 (defmacro with-cork ((socket) &body body)
   (alexandria:once-only (socket)
@@ -92,3 +103,10 @@
 
 (defun string-to-octets (string)
   (babel:string-to-octets string))
+
+(defun monotonic-time ()
+  (iolib.syscalls:get-monotonic-time))
+
+
+(defun dd (str &rest args)
+  (apply #'format t (concatenate 'string "~&" str) args))

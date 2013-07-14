@@ -31,7 +31,7 @@
 
 (defmethod set-timeout ((self client) seconds)
   (with-slots (timeout-at) self
-    (setf timeout-at (+ (get-universal-time) seconds))))
+    (setf timeout-at (+ seconds (monotonic-time)))))
 
 (defmethod reset ((self client) &key (fast-check t))
   (with-slots (env body buffer io parsed-bytes parser proto-env read-header ready) self
@@ -50,10 +50,12 @@
                          :format-control "HEADER is longer than allowed, aborting client early."))
                  (t nil)))
           ((and fast-check (io-select (list io) :timeout +fast-track-ka-timeout+))
+           (print 'try-to-finish--from-client-reset)
            (try-to-finish self))
           (t nil))))
 
 (defmethod close ((self client) &key abort)
+  (print 'close-clinet)
   (with-slots (io) self
     (ignore-errors (close io :abort abort))))
 
@@ -91,14 +93,22 @@
         nil))))
 
 (defmethod try-to-finish ((self client))
+  (print 'try-to-finish)
   (with-slots (buffer env io parsed-bytes parser read-header) self
     (unless read-header
       (return-from try-to-finish (read-body self)))
 
     (static-vectors:with-static-vector (vec +chunk-size+)
-      (let ((read-size (isys:read (fd-of io)
-                                  (static-vectors:static-vector-pointer
-                                   vec) +chunk-size+)))
+      (let ((read-size (handler-case (sysread (fd-of io)
+                                              (static-vectors:static-vector-pointer vec)
+                                              +chunk-size+)
+                         (isys:ewouldblock ()
+                           (return-from try-to-finish nil))
+                         ((or isys:syscall-error end-of-file) ()
+                           (error 'connection-error
+                                  :format-arguments "Connection error detected during read")))))
+        (dd "read-size ~d in try-to-finish ~a" read-size
+          (iomux:fd-ready-p (fd-of io) :input))
         (unless buffer (setf buffer (make-buffer)))
         (fast-io:fast-write-sequence vec buffer 0 read-size)))
 
@@ -111,12 +121,15 @@
           (t nil))))
 
 (defmethod eagerly-finish ((self client))
+  (print 'eagerly-finish)
   (with-slots (ready io) self
     (cond (ready
            t)
-          ((not (io-select (list io) :timeout 0))
+          ((not (iomux:wait-until-fd-ready (fd-of io) :input 0 nil))
+           (print 'io-not-ready)
            nil)
           (t
+           (print 'tri-to-finish--from-eagerly-finish)
            (try-to-finish self)))))
 
 (defmethod read-body ((self client))
@@ -126,21 +139,14 @@
                      +chunk-size+
                      remain)))
       (static-vectors:with-static-vector (vec want)
-        (let ((read-size (handler-case (isys:read (fd-of io) vec want)
+        (let ((read-size (handler-case (sysread (fd-of io) vec want)
                            (isys:ewouldblock (e)
                              (print e)
                              (return-from read-body nil))
-                           ((or isys:syscall-error stream-error) (e)
+                           ((or isys:syscall-error end-of-file) (e)
                              (print e)
                              (error 'connection-error
                                     :format-control "Connection error detected during read")))))
-          (when (zerop read-size)       ;No chunk means a closed socket
-            (close body)
-            (ignore-errors (static-vectors:free-static-vector buffer))
-            (setf buffer nil)
-            (incf requests-served)
-            (setf ready t)
-            (error 'end-of-file))
           (write-sequence body vec :end read-size)
           (decf remain read-size)
           (when (<= remain 0)

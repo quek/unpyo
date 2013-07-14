@@ -17,7 +17,7 @@
           `(("CONTENT_TYPE" "text/plain")
             ("QUERY_STRING" "")
             ("SERVER_PROTOCOL" "HTTP/1.1")
-            ("SERVER_SOFTWARE" +unpyo-version+)
+            ("SERVER_SOFTWARE" ,+unpyo-version+)
             ("GATEWAY_INTERFACE" "CGI/1.2")))))
 
 (defmethod close ((self binder) &key abort)
