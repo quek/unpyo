@@ -1,7 +1,7 @@
 (in-package :unpyo)
 
-(defun make-buffer ()
-  (fast-io::make-output-buffer :output :static))
+(defun make-buffer (&key static)
+  (fast-io::make-output-buffer :output (if static :static nil)))
 
 (defmethod reset ((buffer fast-io::output-buffer) &key fast-check)
   (declare (ignore fast-check))
@@ -25,6 +25,9 @@
 (defun buffer-to-vector (buffer)
   (fast-io::finish-output-buffer buffer))
 
-(defmacro with-buffer ((buffer) &body body)
-  `(let ((,buffer (make-buffer)))
+(defmacro with-buffer ((buffer &key static) &body body)
+  `(let ((,buffer (make-buffer :static ,static)))
      ,@body))
+
+(defun buffer-length (buffer)
+  (fast-io::output-buffer-len buffer))

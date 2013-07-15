@@ -284,7 +284,7 @@
 
 
              (loop for part in res-body
-                   do (with-buffer (buf)
+                   do (with-buffer (buf :static t)
                         (if chunked
                             (progn
                               (bwrite buf (format nil "~x" (bytesize part))
@@ -292,7 +292,7 @@
                             (bwrite buf part))
                         (fast-write client-socket buf)))
              (when chunked
-               (with-buffer (buf)
+               (with-buffer (buf :static t)
                  (bwrite buf #.(concatenate 'string "0" +crlf+ +crlf+))
                  (fast-write client-socket buf))))
         ;; cleanup forms of unwind-protect

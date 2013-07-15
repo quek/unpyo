@@ -40,7 +40,7 @@
             (lambda ()
               (loop with client = nil
                     with continue = t
-                    with buffer = (make-buffer)
+                    with buffer = (make-buffer :static t)
                     do (with-thread-pool-lock self
                          (loop while (zerop (queues:qsize todo))
                                do (when (plusp trim-requested)

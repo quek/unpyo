@@ -90,94 +90,18 @@
           (return (values nil (1- start) #'parse-header)))))
 
 (defun parse-header-end (buffer start end env)
+  (declare (ignore env))
   (cond ((= start end)
          (values nil start #'parse-header-end))
         ((/= #x0a (aref buffer start))
          (error 'http-parse-error :format-control "parse-header-end :buffer ~a :start ~a"
                                   :format-control (list buffer start)))
-        ((not (equal (gethash "REQUEST_METHOD" env) "POST"))
-         (values t (1+ start) nil))
         (t
          (incf start)
-         (if (string= (gethash "Transfer-Encoding" env) "chunked")
-             (parse-chunked-post-data buffer start end env)
-             (pares-length-post-data buffer start end env)))))
+         (let ((out (make-buffer)))
+           (fast-io:fast-write-sequence buffer out start end)
+           (setf (slot-value *parser* 'body) out))
+         (values t start nil))))
 
-(defun parse-chunked-post-data (buffer start end env)
-  (with-slots (body) *parser*
-    (setf body (make-array 4096 :element-type '(unsigned-byte 8)
-                                :adjustable t :fill-pointer t))
-    (parse-chunked-post-data-length buffer start end env)))
-
-(defun parse-chunked-post-data-length (buffer start end env)
-  (aif (search #(#x0d #x0a) buffer :start2 start :end2 end)
-       (progn
-         (let ((len (parse-integer (babel:octets-to-string buffer :start start :end it)
-                                   :radix 16)))
-           (if (zerop len)
-               (parse-chunked-post-data-end buffer (+ it 2) end env)
-               (funcall (make-parse-chunked-post-data-data len)
-                        buffer (+ it 2) end env))))
-       (values nil start #'parse-chunked-post-data-length)))
-
-(defun make-parse-chunked-post-data-data (len)
-  (lambda (buffer start end env)
-    (loop with body = (slot-value *parser* 'body)
-          do (cond ((= start end)
-                    (return (values nil start (make-parse-chunked-post-data-data len))))
-                   ((zerop len)
-                    (return (parse-chunked-post-data-data-end buffer start end env)))
-                   (t
-                    (vector-push-extend (aref buffer start) body)
-                    (incf start)
-                    (decf len))))))
-
-(defun parse-chunked-post-data-data-end (buffer start end env)
-  (if (> (+ 2 start) end)
-      (values nil start #'parse-chunked-post-data-data-end)
-      (if (and (= #x0d (aref buffer start))
-               (= #x0a (aref buffer (1+ start))))
-          (parse-chunked-post-data-length buffer (+ 2 start) end env)
-          (error 'invalid-env))))
-
-(defun parse-chunked-post-data-end (buffer start end env)
-  (declare (ignore env))
-  (aif (search #(#x0d #x0a) buffer :start2 start :end2 end)
-       (values t (+ it 2) nil)
-       (values nil start #'parse-chunked-post-data-end)))
-
-(defun pares-length-post-data (buffer start end env)
-  (with-slots (body) *parser*
-    (let ((length (parse-integer (gethash "Content-Length" env))))
-      (setf body (make-array length :element-type '(unsigned-byte 8)))
-      (funcall (make-parse-length-post-data-data 0 length)
-               buffer start end env))))
-
-(defun make-parse-length-post-data-data (start1 end1)
-  (lambda (buffer start2 end2 env)
-    (declare (ignore env))
-    (let ((body (slot-value *parser* 'body)))
-      (replace body buffer
-               :start1 start1
-               :end1 end1
-               :start2 start2
-               :end2 end2)
-      (if (<= (- end1 start1) (- end2 start2))
-          (values t end2 nil)
-          (values nil end2 (make-parse-length-post-data-data (+ start1 (- end2 start2)) end1))))))
-
-(defun make-parse-post-data (read-length content-length)
-  (lambda (buffer start end env)
-    (declare (ignore env))
-    (with-slots (body) *parser*
-      (replace body buffer
-               :start1 start
-               :end1 end
-               :start2 read-length
-               :end2 content-length)
-      (if (<= (- content-length read-length) (- end start))
-          (values t end nil)
-          (values nil end (make-parse-post-data (+ read-length (- end start))
-                                                content-length))))))
 
 

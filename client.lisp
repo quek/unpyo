@@ -38,6 +38,7 @@
     (reset parser)
     (setf read-header t)
     (setf env (alexandria:copy-hash-table proto-env))
+    (when body (close body))
     (setf body nil)
     (setf parsed-bytes 0)
     (setf ready nil)
@@ -73,11 +74,12 @@
 
 (defmethod setup-body ((self client))
   (with-slots (body body-remain buffer env parser read-header ready requests-served) self
-    (let ((parsed-body (body-of parser))
-          (content-length (gethash "CONTENT_LENGTH" env)))
+    (let* ((parsed-body (body-of parser))
+           (parsed-body-length (buffer-length parsed-body))
+           (content-length (gethash "CONTENT_LENGTH" env)))
       (unless content-length
         ;; no body, parsed-body is a paret of next request?
-        (setf buffer (if (zerop (length parsed-body))
+        (setf buffer (if (zerop parsed-body-length)
                          nil
                          parsed-body))
         (setf body *null-stream*)
@@ -85,9 +87,9 @@
         (setf ready t)
         (return-from setup-body t))
       (let ((remain (- (parse-integer content-length)
-                       (length parsed-body))))
+                       parsed-body-length)))
         (when (<= remain 0)
-          (setf body (flex:make-in-memory-input-stream parsed-body))
+          (setf body (flex:make-in-memory-input-stream (buffer-to-vector parsed-body)))
           (setf buffer nil)
           (incf requests-served)
           (setf ready t)
@@ -98,7 +100,7 @@
               (write-sequence parsed-body body))
             (progn
               (setf body (flex:make-in-memory-output-stream))
-              (write-sequence parsed-body body)))
+              (write-sequence (buffer-to-vector parsed-body) body)))
         (setf body-remain remain)
         (setf read-header nil)
         nil))))
