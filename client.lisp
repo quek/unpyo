@@ -63,6 +63,14 @@
                        (make-concatenated-stream)
                        (make-broadcast-stream)))
 
+(defmethod close ((stream (eql *null-stream*)) &key abort)
+  (declare (ignore abort)))
+
+(defmethod setup-body :before ((self client))
+  (with-slots (env) self
+    (awhen (gethash "Content-Length" env)
+      (setf (gethash "CONTENT_LENGTH" env) it))))
+
 (defmethod setup-body ((self client))
   (with-slots (body body-remain buffer env parser read-header ready requests-served) self
     (let ((parsed-body (body-of parser))
@@ -76,9 +84,9 @@
         (setf ready t)
         (return-from setup-body t))
       (let ((remain (- (parse-integer content-length)
-                       (bytesize body))))
+                       (length parsed-body))))
         (when (<= remain 0)
-          (setf body (make-string-input-stream parsed-body))
+          (setf body (make-instance 'fast-io:fast-input-stream :vector parsed-body))
           (setf buffer nil)
           (incf requests-served)
           (setf ready t)
@@ -86,8 +94,10 @@
         (if (> remain +max-body+)
             (progn
               (setf body (temporary-file:open-temporary :direction :io :external-format :utf-8))
-              (write-string parsed-body body))
-            (setf body (make-string-input-stream parsed-body)))
+              (write-sequence parsed-body body))
+            (progn
+              (setf body (make-instance 'fast-io:fast-output-stream))
+              (write-sequence parsed-body body)))
         (setf body-remain remain)
         (setf read-header nil)
         nil))))
@@ -135,9 +145,7 @@
 (defmethod read-body ((self client))
   (with-slots (body body-remain buffer io ready requests-served) self
     (let* ((remain body-remain)
-           (want (if (> remain +chunk-size+)
-                     +chunk-size+
-                     remain)))
+           (want (min remain +chunk-size+)))
       (static-vectors:with-static-vector (vec want)
         (let ((read-size (handler-case (sysread (fd-of io) vec want)
                            (isys:ewouldblock (e)
@@ -149,14 +157,16 @@
                                     :format-control "Connection error detected during read")))))
           (write-sequence body vec :end read-size)
           (decf remain read-size)
-          (when (<= remain 0)
-            (file-position buffer 0)
-            (setf buffer nil)
-            (incf requests-served)
-            (setf ready t)
-            (return-from read-body t))
-          (setf body-remain remain)
-          nil)))))
+          (if (<= remain 0)
+              (progn
+                (file-position body 0)
+                (setf buffer nil)
+                (incf requests-served)
+                (setf ready t)
+                t)
+              (progn
+                (setf body-remain remain)
+                nil)))))))
 
 
 #+nil

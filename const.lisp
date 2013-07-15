@@ -58,6 +58,10 @@ Use Error4040Handler for custom stuff.")
 (alexandria:define-constant +http/1.0-200+
   (concatenate 'string "HTTP/1.0 200 OK" +crlf+) :test 'equal)
 
+(alexandria:define-constant +unpyo-input+ "unpyo.input" :test 'equal)
+(alexandria:define-constant +unpyo-url-scheme+ "unpyo.url_scheme" :test 'equal)
+(alexandria:define-constant +unpyo-after-reply+ "unpyo.after_reply" :test 'equal)
+
 (alexandria:define-constant +hijack-p+ "unpyo.hijack?" :test 'equal)
 (alexandria:define-constant +hijack+ "unpyo.hijack" :test 'equal)
 (alexandria:define-constant +hijack-io+ "unpyo.hijack_io" :test 'equal)

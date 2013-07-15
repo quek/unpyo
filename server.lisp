@@ -88,7 +88,6 @@
                          (print e)))))
       (isys:econnaborted (e) ;client closed the socket even before accept
         (print e))
-      #+ぬぬも
       (error (e)
         (unknow-error events server e "Listen loop")))))
 
@@ -132,7 +131,6 @@
              (http-parse-error (e)
                (write-400 client)
                (evets-parse-error events self (env-of client) e))
-             #+ぬぬも
              (error (e)
                (write-500 client)
                (unknow-error events self e "Read"))))
@@ -191,9 +189,9 @@
       (setf (gethash "unpyo.socket" env) client-socket)
       (setf (gethash +hijack-p+ env) t)
       (setf (gethash +hijack+ env) client-socket)
-      (setf (gethash "unpyo.input" env) body)
-      (setf (gethash "unpyo.url_scheme" env) (if (gethash "HTTPS" env) "https" "http"))
-      (setf (gethash "unpyo.after_reply" env) after-reply)
+      (setf (env env +unpyo-input+) body)
+      (setf (env env +unpyo-url-scheme+) (if (gethash "HTTPS" env) "https" "http"))
+      (setf (env env +unpyo-after-reply+) after-reply)
       (unwind-protect
            (with-cork (client-socket)
              (handler-case

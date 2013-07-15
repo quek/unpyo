@@ -109,4 +109,4 @@
 
 
 (defun dd (str &rest args)
-  (apply #'format t (concatenate 'string "~&" str) args))
+  (apply #'format *trace-output* (concatenate 'string "~&" str) args))
