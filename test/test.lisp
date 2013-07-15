@@ -73,7 +73,7 @@
       (is (string= "POST" (gethash "REQUEST_METHOD" env)))
       (let ((buffer (fast-io:make-octet-vector 10)))
         (is (= 3 (read-sequence buffer (gethash unpyo::+unpyo-input+ env))))
-        (is (equal "a=b" buffer))))))
+        (is (string= "a=b" (babel:octets-to-string buffer :end 3)))))))
 
 (with-test-server (server)
     (debug!))

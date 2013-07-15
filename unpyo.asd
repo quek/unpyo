@@ -30,5 +30,6 @@
                :queues.simple-queue
                :temporary-file
                :fast-io
+               :flexi-streams
                :info.read-eval-print.series-ext
                :com.informatimago.common-lisp.http))

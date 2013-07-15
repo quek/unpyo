@@ -76,6 +76,7 @@
     (let ((parsed-body (body-of parser))
           (content-length (gethash "CONTENT_LENGTH" env)))
       (unless content-length
+        ;; no body, parsed-body is a paret of next request?
         (setf buffer (if (zerop (length parsed-body))
                          nil
                          parsed-body))
@@ -86,7 +87,7 @@
       (let ((remain (- (parse-integer content-length)
                        (length parsed-body))))
         (when (<= remain 0)
-          (setf body (make-instance 'fast-io:fast-input-stream :vector parsed-body))
+          (setf body (flex:make-in-memory-input-stream parsed-body))
           (setf buffer nil)
           (incf requests-served)
           (setf ready t)
@@ -96,7 +97,7 @@
               (setf body (temporary-file:open-temporary :direction :io :external-format :utf-8))
               (write-sequence parsed-body body))
             (progn
-              (setf body (make-instance 'fast-io:fast-output-stream))
+              (setf body (flex:make-in-memory-output-stream))
               (write-sequence parsed-body body)))
         (setf body-remain remain)
         (setf read-header nil)
@@ -159,7 +160,13 @@
           (decf remain read-size)
           (if (<= remain 0)
               (progn
-                (file-position body 0)
+                (typecase body
+                  (flex:in-memory-output-stream
+                   (setf body (prog1 (flex:make-in-memory-input-stream
+                                      (flex:get-output-stream-sequence body))
+                                (close body))))
+                  (t
+                   (file-position body 0)))
                 (setf buffer nil)
                 (incf requests-served)
                 (setf ready t)
