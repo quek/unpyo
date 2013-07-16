@@ -52,4 +52,4 @@
 
 
 (with-test-server (server)
-  (debug! 'post-big-data))
+  (debug!))

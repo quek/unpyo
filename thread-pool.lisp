@@ -120,7 +120,8 @@
                     (catch :wakeup
                       (loop while running
                             do (trim pool)
-                               (sleep timeout))))))))
+                               (sleep timeout))))
+                  :name (format nil "unpyo auto-trim ~a" self)))))
 
 (defmethod stop ((self auto-trim) &key)
   (with-slots (running thread) self

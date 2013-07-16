@@ -86,7 +86,8 @@
                                  (format *error-output*
                                          "Error in reactor loop escaped: ~a"
                                          e)
-                                 (trivial-backtrace:print-backtrace e :output  *error-output*)))))))))
+                                 (trivial-backtrace:print-backtrace e :output  *error-output*)))))
+                  :name (format nil "unpyo reactor ~a" self)))))
 
 
 (defmethod calculate-sleep ((self reactor))
