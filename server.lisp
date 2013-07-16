@@ -85,9 +85,9 @@
                              (<< pool client)))
                        (isys:syscall-error (e)
                          ;; ignore error
-                         (print e)))))
+                         (trivial-backtrace:print-backtrace e)))))
       (isys:econnaborted (e) ;client closed the socket even before accept
-        (print e))
+        )
       (error (e)
         (unknow-error events server e "Listen loop")))))
 

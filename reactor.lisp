@@ -63,7 +63,7 @@
                        (setf sockets (delete c sockets))
                        (write-500 c)
                        (close c)
-                       (print e))))))
+                       (trivial-backtrace:print-backtrace e))))))
            (when timeouts
              (bt:with-lock-held (mutex)
                (loop with now = (monotonic-time)

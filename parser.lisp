@@ -99,9 +99,7 @@
         (t
          (incf start)
          (let ((out (make-buffer)))
-           (fast-io:fast-write-sequence buffer out start end)
+           ;; (fast-io:fast-write-sequence buffer out start end)
+           (fast-io:fast-write-sequence (subseq buffer start end) out)
            (setf (slot-value *parser* 'body) out))
          (values t start nil))))
-
-
-

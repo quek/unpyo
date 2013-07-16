@@ -56,7 +56,7 @@
           (t nil))))
 
 (defmethod close ((self client) &key abort)
-  (print 'close-clinet)
+  (dd "close client ~a" self)
   (with-slots (io) self
     (ignore-errors (close io :abort abort))))
 
@@ -72,7 +72,47 @@
     (awhen (gethash "Content-Length" env)
       (setf (gethash "CONTENT_LENGTH" env) it))))
 
+(defmethod eagerly-finish ((self client))
+  (print 'eagerly-finish)
+  (with-slots (ready io) self
+    (cond (ready
+           t)
+          ((not (iomux:wait-until-fd-ready (fd-of io) :input 0 nil))
+           (print 'io-not-ready)
+           nil)
+          (t
+           (print 'tri-to-finish--from-eagerly-finish)
+           (try-to-finish self)))))
+
+(defmethod try-to-finish ((self client))
+  (dd "try-to-finish")
+  (with-slots (buffer env io parsed-bytes parser read-header) self
+    (unless read-header
+      (return-from try-to-finish (read-body self)))
+    (static-vectors:with-static-vector (vec +chunk-size+)
+      (let ((read-size (handler-case (sysread (fd-of io)
+                                              (static-vectors:static-vector-pointer vec)
+                                              +chunk-size+)
+                         (isys:ewouldblock ()
+                           (return-from try-to-finish nil))
+                         ((or isys:syscall-error end-of-file) ()
+                           (error 'connection-error
+                                  :format-control "Connection error detected during read")))))
+        (dd "read-size ~d in try-to-finish ~a" read-size
+          (iomux:fd-ready-p (fd-of io) :input))
+        (unless buffer (setf buffer (make-buffer)))
+        (fast-io:fast-write-sequence vec buffer 0 read-size)))
+
+    (setf parsed-bytes (execute parser env (buffer-to-vector buffer) parsed-bytes))
+    (cond ((finished-p parser)
+           (setup-body self))
+          ((>= parsed-bytes +max-header+)
+           (error 'http-parse-error
+                  :format-control "HEADER is longer than allowed, aborting client early."))
+          (t nil))))
+
 (defmethod setup-body ((self client))
+  (dd "setup-body")
   (with-slots (body body-remain buffer env parser read-header ready requests-served) self
     (let* ((parsed-body (body-of parser))
            (parsed-body-length (buffer-length parsed-body))
@@ -96,8 +136,8 @@
           (return-from setup-body t))
         (if (> remain +max-body+)
             (progn
-              (setf body (temporary-file:open-temporary :direction :io :external-format :utf-8))
-              (write-sequence parsed-body body))
+              (setf body (temporary-file:open-temporary :direction :io :element-type '(unsigned-byte 8)))
+              (write-sequence (buffer-to-vector parsed-body) body))
             (progn
               (setf body (flex:make-in-memory-output-stream))
               (write-sequence (buffer-to-vector parsed-body) body)))
@@ -105,60 +145,23 @@
         (setf read-header nil)
         nil))))
 
-(defmethod try-to-finish ((self client))
-  (print 'try-to-finish)
-  (with-slots (buffer env io parsed-bytes parser read-header) self
-    (unless read-header
-      (return-from try-to-finish (read-body self)))
-
-    (static-vectors:with-static-vector (vec +chunk-size+)
-      (let ((read-size (handler-case (sysread (fd-of io)
-                                              (static-vectors:static-vector-pointer vec)
-                                              +chunk-size+)
-                         (isys:ewouldblock ()
-                           (return-from try-to-finish nil))
-                         ((or isys:syscall-error end-of-file) ()
-                           (error 'connection-error
-                                  :format-arguments "Connection error detected during read")))))
-        (dd "read-size ~d in try-to-finish ~a" read-size
-          (iomux:fd-ready-p (fd-of io) :input))
-        (unless buffer (setf buffer (make-buffer)))
-        (fast-io:fast-write-sequence vec buffer 0 read-size)))
-
-    (setf parsed-bytes (execute parser env (buffer-to-vector buffer) parsed-bytes))
-    (cond ((finished-p parser)
-           (setup-body self))
-          ((>= parsed-bytes +max-header+)
-           (error 'http-parse-error
-                  :format-control "HEADER is longer than allowed, aborting client early."))
-          (t nil))))
-
-(defmethod eagerly-finish ((self client))
-  (print 'eagerly-finish)
-  (with-slots (ready io) self
-    (cond (ready
-           t)
-          ((not (iomux:wait-until-fd-ready (fd-of io) :input 0 nil))
-           (print 'io-not-ready)
-           nil)
-          (t
-           (print 'tri-to-finish--from-eagerly-finish)
-           (try-to-finish self)))))
-
 (defmethod read-body ((self client))
+  (dd "read-body")
   (with-slots (body body-remain buffer io ready requests-served) self
     (let* ((remain body-remain)
            (want (min remain +chunk-size+)))
       (static-vectors:with-static-vector (vec want)
-        (let ((read-size (handler-case (sysread (fd-of io) vec want)
-                           (isys:ewouldblock (e)
-                             (print e)
-                             (return-from read-body nil))
-                           ((or isys:syscall-error end-of-file) (e)
-                             (print e)
-                             (error 'connection-error
-                                    :format-control "Connection error detected during read")))))
-          (write-sequence body vec :end read-size)
+        (let ((read-size
+                (handler-case
+                    (sysread (fd-of io) (static-vectors:static-vector-pointer vec) want)
+                  (isys:ewouldblock (e)
+                    (print e)
+                    (return-from read-body nil))
+                  ((or isys:syscall-error end-of-file) (e)
+                    (print e)
+                    (error 'connection-error
+                           :format-control "Connection error detected during read")))))
+          (write-sequence vec body :end read-size)
           (decf remain read-size)
           (if (<= remain 0)
               (progn
