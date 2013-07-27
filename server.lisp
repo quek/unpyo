@@ -112,20 +112,21 @@
     (let ((close-socket t))
       (unwind-protect
            (handler-case
-               (loop for result = (handle-request self client buffer)
-                     do (cond ((null result)
-                               (loop-finish))
-                              ((eq result :async)
-                               (setf close-socket nil)
-                               (loop-finish))
-                              (t
-                               (reset buffer)
-                               (unless (reset client :fast-check (eq status :run))
+               (with-debugger
+                 (loop for result = (handle-request self client buffer)
+                       do (cond ((null result)
+                                 (loop-finish))
+                                ((eq result :async)
                                  (setf close-socket nil)
-                                 (set-timeout client persistent-timeout)
-                                 (dd "add ~a to reactor from server process-client" client)
-                                 (<< reactor client)
-                                 (loop-finish)))))
+                                 (loop-finish))
+                                (t
+                                 (reset buffer)
+                                 (unless (reset client :fast-check (eq status :run))
+                                   (setf close-socket nil)
+                                   (set-timeout client persistent-timeout)
+                                   (dd "add ~a to reactor from server process-client" client)
+                                   (<< reactor client)
+                                   (loop-finish))))))
              (connection-error (e)
                (print e))
              (http-parse-error (e)
@@ -217,7 +218,7 @@
                  (unknow-error events self e "app")
                  (setf (values status headers res-body) (lowlevel-error self e))))
 
-             (when (and (listp res-body) (null (cdr res-body)))
+             (when (and (car res-body) (null (cdr res-body)))
                (setf content-length (bytesize (car res-body))))
              (if (equal "HTTP/1.1" (env env "HTTP_VERSION"))
                  (progn                 ;HTTP/1.1
@@ -251,7 +252,6 @@
              (loop for (k . v) in headers
                    do (cond ((string= k "Content-Length")
                              (setf content-length v))
-                            ((string= k "Content-Type"))
                             ((string= k +hijack+)
                              (setf response-hijack v))
                             (t

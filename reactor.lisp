@@ -45,10 +45,11 @@
                      (bt:with-lock-held (mutex)
                        (setf timeouts (delete c timeouts))))
                    (handler-case
-                       (when (try-to-finish c)
-                         (dd "add ~a to thread pool from reactor" c)
-                         (<< app-pool c)
-                         (setf sockets (delete c sockets)))
+                       (with-debugger
+                         (when (try-to-finish c)
+                           (dd "add ~a to thread pool from reactor" c)
+                           (<< app-pool c)
+                           (setf sockets (delete c sockets))))
                      (http-parse-error (e)
                        (setf sockets (delete c sockets))
                        (write-400 c)

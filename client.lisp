@@ -97,7 +97,7 @@
                            (return-from try-to-finish nil))
                          ((or isys:syscall-error end-of-file) ()
                            (error 'connection-error
-                                  :format-control "Connection error detected during read")))))
+                                  :format-control "Connection error detected during read.")))))
         (dd "read-size ~d in try-to-finish ~a" read-size
           (iomux:fd-ready-p (fd-of io) :input))
         (unless buffer (setf buffer (make-buffer)))

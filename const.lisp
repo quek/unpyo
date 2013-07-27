@@ -36,8 +36,8 @@ The parser detects this, but we'd also like to do this as well.")
   :documentation "Indicate that we couldn't parse the request")
 
 (alexandria:define-constant +error-404-response+
-    (format nil "HTTP/1.1 404 Not Found~aConnection: close~aServer: Unpyo ~a~a~aNOT FOUND"
-            +crlf+ +crlf+ +unpyo-version+ +crlf+ +crlf+)
+    (format nil "HTTP/1.1 404 Not Found~aContent-Type: text/html~aConnection: close~aServer: Unpyo ~a~a~aNOT FOUND"
+            +crlf+ +crlf+ +crlf+ +unpyo-version+ +crlf+ +crlf+)
   :test 'equal
   :documentation "The standard empty 404 response for bad requests.
 Use Error4040Handler for custom stuff.")
