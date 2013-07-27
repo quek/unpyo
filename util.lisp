@@ -108,5 +108,17 @@
   (iolib.syscalls:get-monotonic-time))
 
 
+(defvar *invoke-debugger-p* t)
+
+(defun my-debugger (e)
+  (when *invoke-debugger-p*
+    (with-simple-restart (continue "Return from here.")
+      (invoke-debugger e))))
+
+(defmacro with-debugger (&body body)
+  `(handler-bind ((error #'my-debugger))
+     ,@body))
+
+
 (defun dd (str &rest args)
   (apply #'format *trace-output* (concatenate 'string "~&" str) args))

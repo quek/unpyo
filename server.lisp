@@ -154,15 +154,20 @@
                    (gethash "SERVER_PORT" env) (default-server-port env)))
         (setf (gethash "SERVER_NAME" env) "localhost"
               (gethash "SERVER_PORT" env) (default-server-port env))))
-  (let ((uri (puri:parse-uri (gethash "REQUEST_URI" env))))
+  (let* ((path (gethash "REQUEST_URI" env))
+         (? (position #\? path)))
     (unless (gethash "REQUEST_PATH" env)
-      (setf (gethash "REQUEST_PATH" env) (puri:uri-path uri))
+      (setf (gethash "REQUEST_PATH" env) (subseq path 0 ?))
       (unless (gethash "REQUEST_PATH" env)
         (error "No REQUEST PATH")))
-    (awhen (puri:uri-query uri)
-      (setf (gethash "QUERY_STRING" env) it)))
+    (when ?
+      (setf (gethash "QUERY_STRING" env) (subseq path (1+ ?)))))
   ;; TODO REMOTE_ADDR
   )
+
+(puri:uri-query (puri:parse-uri "http://localhost:7780/foo?a=%E3%81%82"))
+;;⇒ "a=ã"
+
 
 (defun default-server-port (env)
   (if (equal "https" (gethash "HTTP_X_FORWARDED_PROTO" env))
@@ -199,7 +204,7 @@
              (handler-case
                  (progn
                    (setf (values status headers res-body)
-                         (call app env))
+                         (with-debugger (call app env)))
                    (when (hijacked-p client)
                      (return-from handle-request :async))
                    (when (stringp status)
@@ -306,11 +311,10 @@
       keep-alive)))
 
 (defmethod lowlevel-error ((self server) error)
-  (values 500 nil (let (xs)
-                    (trivial-backtrace:map-backtrace (lambda (x) (push (princ-to-string x) xs)))
-                    (setf xs (nreverse xs))
-                    (push (format nil "~a~%" error) xs)
-                    xs)))
+  (values 500 nil (list
+                   (format nil "~a~%" error)
+                   (with-output-to-string (out)
+                     (trivial-backtrace:print-backtrace error :output out :verbose t)))))
 
 (defmethod graceful-shutdown ((self server))
   (with-slots (thread-pool) self
