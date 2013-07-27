@@ -23,7 +23,6 @@
   (with-slots (app-pool events input mutex ready server sleep-for sockets timeouts trigger) self
     (unwind-protect
          (loop for cs = (io-select sockets :timeout sleep-for) do
-           (print (list cs sockets))
            (loop for c in cs do
              (if (eql c ready)
                  (bt:with-lock-held (mutex)
@@ -31,24 +30,20 @@
                      (dd "reactor read command ~a" command)
                      (case command
                        (#.+reactor-add-command+
-                        (print '+reactor-add-command+)
                         (setf sockets (nconc sockets input))
                         (setf input ()))
                        (#.+reactor-clear-command+
-                        (print '+reactor-clear-command+)
                         (setf sockets (delete-if (lambda (s)
                                                    (unless (eql s ready)
                                                      (close s)
                                                      t))
                                                  sockets)))
                        (#.+reactor-shutdown-command+
-                        (print '+reactor-shutdown-command+)
                         (return-from run nil)))) )
                  (progn
                    (when (timeout-at-of c)
                      (bt:with-lock-held (mutex)
                        (setf timeouts (delete c timeouts))))
-                   (print 'try-to-finish--from-reactor-run)
                    (handler-case
                        (when (try-to-finish c)
                          (dd "add ~a to thread pool from reactor" c)

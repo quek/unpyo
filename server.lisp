@@ -154,11 +154,13 @@
                    (gethash "SERVER_PORT" env) (default-server-port env)))
         (setf (gethash "SERVER_NAME" env) "localhost"
               (gethash "SERVER_PORT" env) (default-server-port env))))
-  (unless (gethash "REQUEST_PATH" env)
-    (setf (gethash "REQUEST_PATH" env)
-          (ignore-errors (puri:uri-path (puri:parse-uri (gethash "REQUEST_URI" env)))))
+  (let ((uri (puri:parse-uri (gethash "REQUEST_URI" env))))
     (unless (gethash "REQUEST_PATH" env)
-      (error "No REQUEST PATH")))
+      (setf (gethash "REQUEST_PATH" env) (puri:uri-path uri))
+      (unless (gethash "REQUEST_PATH" env)
+        (error "No REQUEST PATH")))
+    (awhen (puri:uri-query uri)
+      (setf (gethash "QUERY_STRING" env) it)))
   ;; TODO REMOTE_ADDR
   )
 
@@ -208,7 +210,7 @@
                      (return-from handle-request :async)))
                (error (e)
                  (unknow-error events self e "app")
-                 (setf (values status headers res-body) (lowlevel-error self))))
+                 (setf (values status headers res-body) (lowlevel-error self e))))
 
              (when (and (listp res-body) (null (cdr res-body)))
                (setf content-length (bytesize (car res-body))))
@@ -302,6 +304,13 @@
               if o
                 do (funcall o)))
       keep-alive)))
+
+(defmethod lowlevel-error ((self server) error)
+  (values 500 nil (let (xs)
+                    (trivial-backtrace:map-backtrace (lambda (x) (push (princ-to-string x) xs)))
+                    (setf xs (nreverse xs))
+                    (push (format nil "~a~%" error) xs)
+                    xs)))
 
 (defmethod graceful-shutdown ((self server))
   (with-slots (thread-pool) self
