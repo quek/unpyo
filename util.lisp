@@ -110,7 +110,9 @@
 
 (defvar *invoke-debugger-p* t)
 
-(defun my-debugger (e)
+(defgeneric my-debugger (condition))
+
+(defmethod my-debugger (e)
   (when *invoke-debugger-p*
     (with-simple-restart (continue "Return from here.")
       (invoke-debugger e))))
