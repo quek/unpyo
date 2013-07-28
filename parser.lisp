@@ -69,7 +69,7 @@
       (error 'http-parse-error :format-control "store-hader :buffer ~a :start ~a"
                                :format-arguments (list buffer start)))
     (let ((name (babel:octets-to-string buffer :start start :end colon))
-          (value (babel:octets-to-string buffer :start (1+ colon) :end end)))
+          (value (string-trim " " (babel:octets-to-string buffer :start (1+ colon) :end end))))
       (setf (gethash name env) value))))
 
 (defun parse-header (buffer start end env)
