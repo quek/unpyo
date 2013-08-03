@@ -9,9 +9,12 @@
           #:*request*
           #:env
           #:env-of
+          #:param
+
+          #:defaction
 
           #:server
           #:run
           #:stop
 
-          #:status-app))
+          #:app-routes-mixin))

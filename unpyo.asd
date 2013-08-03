@@ -5,6 +5,7 @@
   :description "Describe unpyo here"
   :author "TAHARA Yoshinori <read.eval.print@gmail.com>"
   :license "Specify license here"
+  :pathname "src/"
   :components ((:file "package")
                (:file "type")
                (:file "var")
