@@ -17,11 +17,11 @@
   ((env :accessor env-of)
    (call-back :initform #'identity :accessor call-back-of)))
 
-(defmethod unpyo:call ((app test-app) env)
-  (setf (env-of app) env)
-  (unwind-protect (funcall (call-back-of app) env)
+(defmethod unpyo:call ((app test-app))
+  (setf (env-of app) (unpyo:env-of unpyo:*request*))
+  (unwind-protect (funcall (call-back-of app) unpyo:*request*)
     (setf (call-back-of app) #'identity))
-  (values 200 nil '("OK")))
+  (unpyo:html "OK"))
 
 (defvar *app* (make-instance 'test-app))
 

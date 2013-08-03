@@ -3,14 +3,7 @@
 (defgeneric run (x &key &allow-other-keys))
 (defgeneric stop (x &key &allow-other-keys))
 
-
-(defgeneric env (env key)
-  (:method ((env hash-table) key)
-    (gethash key env)))
-(defgeneric (setf env) (value env key)
-  (:method (value (env hash-table) key)
-    (setf (gethash key env) value)))
-(defgeneric env-of (env-holder))
+(defgeneric call (app))
 
 
 (defgeneric read-1 (fd))

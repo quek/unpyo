@@ -27,8 +27,11 @@
       (isys:eexist ()
         (warn "FD ~A is already monitored." fd)))))
 
-(defun bytesize (string)
-  (babel:string-size-in-octets string))
+(defgeneric bytesize (x)
+  (:method ((string string))
+    (babel:string-size-in-octets string))
+  (:method (sequence)
+    (length sequence)))
 
 (defun io-select (sockets &key timeout)
   (with-open-stream (epoll-fd (isys:epoll-create 1))

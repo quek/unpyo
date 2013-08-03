@@ -26,7 +26,7 @@
     (mapc #'c (ios-of self))
     (mapc #'delete-file (slot-value self 'unix-paths))))
 
-(defmethod env ((self binder) sock)
+(defmethod fetch-env ((self binder) sock)
   (gethash sock (slot-value self 'envs) (slot-value self 'proto-env)))
 
 (defmethod import-form-env ((self binder))

@@ -3,9 +3,15 @@
 (defclass status-app ()
   ())
 
-(defmethod call ((self status-app) env)
-  (print 'call-app)
-  (values 200 nil `(,(format nil "<html><body><p>~a</p><ul>~%" (local-time:now))
-                    ,@(multiple-value-bind (k v) (scan-hash env)
-                        (collect (format nil "<li>~a ~a</li>~%" k v)))
-                    "</ul></body></html>")))
+(defmethod call ((self status-app))
+  (html
+    (:html
+      (:head
+          (:meta :charset "utf-8")
+        (:title "env"))
+      (:body
+          (:p (local-time:now))
+        (:ul
+            (maphash (lambda (k v)
+                       (html (:li k " " v)))
+                     (env-of *request*)))))))

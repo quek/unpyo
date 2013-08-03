@@ -80,13 +80,13 @@
                        (loop-finish))
                      (handler-case
                          (awhen (iolib.sockets:accept-connection sock :wait nil)
-                           (let ((client (make-instance 'client :io it :env (env binder sock))))
+                           (let ((client (make-instance 'client :io it :env (fetch-env binder sock))))
                              (dd "add ~a to thread pool from server" client)
                              (<< pool client)))
                        (isys:syscall-error (e)
                          ;; ignore error
                          (trivial-backtrace:print-backtrace e)))))
-      (isys:econnaborted (e) ;client closed the socket even before accept
+      (isys:econnaborted () ;client closed the socket even before accept
         )
       (error (e)
         (unknow-error events server e "Listen loop")))))
@@ -197,117 +197,127 @@
       (setf (gethash "unpyo.socket" env) client-socket)
       (setf (gethash +hijack-p+ env) t)
       (setf (gethash +hijack+ env) client-socket)
-      (setf (env env +unpyo-input+) body)
-      (setf (env env +unpyo-url-scheme+) (if (gethash "HTTPS" env) "https" "http"))
-      (setf (env env +unpyo-after-reply+) after-reply)
-      (unwind-protect
-           (with-cork (client-socket)
-             (handler-case
-                 (progn
-                   (setf (values status headers res-body)
-                         (with-debugger (call app env)))
-                   (when (hijacked-p client)
-                     (return-from handle-request :async))
-                   (when (stringp status)
-                     (setf status (parse-integer status)))
-                   (when (= status -1)
-                     (unless (and (null headers) (null res-body))
-                       (error "async response must have empty headers and body"))
-                     (return-from handle-request :async)))
-               (error (e)
-                 (unknow-error events self e "app")
-                 (setf (values status headers res-body) (lowlevel-error self e))))
+      (setf (gethash +unpyo-input+ env) body)
+      (setf (gethash +unpyo-url-scheme+ env) (if (gethash "HTTPS" env) "https" "http"))
+      (setf (gethash +unpyo-after-reply+ env) after-reply)
+      (let ((*request* (make-request app env)))
+        (unwind-protect
+             (with-cork (client-socket)
+               (handler-case
+                   (progn
+                     (with-debugger
+                       (let ((info.read-eval-print.html:*html-output* *request*))
+                         (call app)))
+                     (setf (values status headers res-body)
+                           (values (status-of *request*)
+                                   (response-headers-of *request*)
+                                   (body-of *request*)))
+                     (when (hijacked-p client)
+                       (return-from handle-request :async))
+                     (when (stringp status)
+                       (setf status (parse-integer status)))
+                     (when (= status -1)
+                       (unless (and (null headers) (null res-body))
+                         (error "async response must have empty headers and body"))
+                       (return-from handle-request :async)))
+                 (error (e)
+                   (unknow-error events self e "app")
+                   (setf (values status headers res-body) (lowlevel-error self e))))
 
-             (when (and (car res-body) (null (cdr res-body)))
-               (setf content-length (bytesize (car res-body))))
-             (if (equal "HTTP/1.1" (env env "HTTP_VERSION"))
-                 (progn                 ;HTTP/1.1
-                   (setf allow-chunked t)
-                   (setf keep-alive (not (equal (gethash "HTTP_CONNECTION" env) "close")))
-                   (setf include-keepalive-header nil)
-                   (if (= status 200)
-                       (bwrite buffer +http/1.1-200+)
-                       (progn
-                         (bwrite buffer "HTTP/1.1 " status " "
-                                 (gethash status *http-status-codes*)
-                                 +crlf+)
-                         (setf no-body (or no-body
-                                           (< status 200)
-                                           (gethash status *status-with-no-entity-body*))))))
+               (when (and (car res-body) (null (cdr res-body)))
+                 (setf content-length (bytesize (car res-body))))
+               (if (equal "HTTP/1.1" (gethash "HTTP_VERSION" env))
+                   (progn                ;HTTP/1.1
+                     (setf allow-chunked t)
+                     (setf keep-alive (not (equal (gethash "HTTP_CONNECTION" env) "close")))
+                     (setf include-keepalive-header nil)
+                     (if (= status 200)
+                         (bwrite buffer +http/1.1-200+)
+                         (progn
+                           (bwrite buffer "HTTP/1.1 " status " "
+                                   (gethash status *http-status-codes*)
+                                   +crlf+)
+                           (setf no-body (or no-body
+                                             (< status 200)
+                                             (gethash status *status-with-no-entity-body*))))))
 
-                 (progn                 ;HTTP/1.0
-                   (setf allow-chunked nil)
-                   (setf keep-alive (equal "Keep-Alive" (gethash "HTTP_CONNECTION" env)))
-                   (setf include-keepalive-header keep-alive)
-                   (if (= status 200)
-                       (bwrite buffer +http/1.0-200+)
-                       (progn
-                         (bwrite buffer "HTTP/1.0 " status " "
-                                 (gethash status *http-status-codes*)
-                                 +crlf+)
-                         (setf no-body (or no-body
-                                           (< status 200)
-                                           (gethash status *status-with-no-entity-body*)))))))
+                   (progn                ;HTTP/1.0
+                     (setf allow-chunked nil)
+                     (setf keep-alive (equal "Keep-Alive" (gethash "HTTP_CONNECTION" env)))
+                     (setf include-keepalive-header keep-alive)
+                     (if (= status 200)
+                         (bwrite buffer +http/1.0-200+)
+                         (progn
+                           (bwrite buffer "HTTP/1.0 " status " "
+                                   (gethash status *http-status-codes*)
+                                   +crlf+)
+                           (setf no-body (or no-body
+                                             (< status 200)
+                                             (gethash status *status-with-no-entity-body*)))))))
 
-             (loop for (k . v) in headers
-                   do (cond ((string= k "Content-Length")
-                             (setf content-length v))
-                            ((string= k +hijack+)
-                             (setf response-hijack v))
-                            (t
-                             (when (string= k "Transfer-Encoding")
-                               (setf allow-chunked nil)
-                               (setf content-length nil))
-                             (loop for v in (ppcre:split +newline+ v)
-                                   do (bwrite buffer k +colon+ v +crlf+)))))
+               (loop for (k . v) in headers
+                     do (cond ((string= k "Content-Length")
+                               (setf content-length v))
+                              ((string= k +hijack+)
+                               (setf response-hijack v))
+                              (t
+                               (when (string= k "Transfer-Encoding")
+                                 (setf allow-chunked nil)
+                                 (setf content-length nil))
+                               (loop for v in (ppcre:split +newline+ v)
+                                     do (bwrite buffer k +colon+ v +crlf+)))))
 
-             (when no-body
-               (bwrite +crlf+ buffer)
+               (when no-body
+                 (bwrite +crlf+ buffer)
+                 (fast-write client-socket buffer)
+                 (return-from handle-request keep-alive))
+
+               (cond (include-keepalive-header
+                      (bwrite buffer #.(concatenate 'string "Connection: Keep-Alive" +crlf+)))
+                     ((not keep-alive)
+                      (bwrite buffer #.(concatenate 'string "Connection: close" +crlf+))))
+
+               (unless response-hijack
+                 (if content-length
+                     (progn
+                       (bwrite buffer "Content-Length: " content-length +crlf+)
+                       (setf chunked nil))
+                     (progn
+                       (bwrite buffer
+                               #.(concatenate 'string "Transfer-Encoding: chunked" +crlf+))
+                       (setf chunked t))))
+
+               (bwrite buffer +crlf+)
+
                (fast-write client-socket buffer)
-               (return-from handle-request keep-alive))
 
-             (cond (include-keepalive-header
-                    (bwrite buffer #.(concatenate 'string "Connection: Keep-Alive" +crlf+)))
-                   ((not keep-alive)
-                    (bwrite buffer #.(concatenate 'string "Connection: close" +crlf+))))
-
-             (unless response-hijack
-               (if content-length
-                   (progn
-                     (bwrite buffer "Content-Length: " content-length +crlf+)
-                     (setf chunked nil))
-                   (progn
-                     (bwrite buffer
-                             #.(concatenate 'string "Transfer-Encoding: chunked" +crlf+))
-                     (setf chunked t))))
-
-             (bwrite buffer +crlf+)
-
-             (fast-write client-socket buffer)
-
-             (when response-hijack
-               (funcall response-hijack client-socket)
-               (return-from handle-request :async))
+               (when response-hijack
+                 (funcall response-hijack client-socket)
+                 (return-from handle-request :async))
 
 
-             (loop for part in res-body
-                   do (with-buffer (buf :static t)
-                        (if chunked
-                            (progn
-                              (bwrite buf (format nil "~x" (bytesize part))
-                                      +crlf+ part +crlf+))
-                            (bwrite buf part))
-                        (fast-write client-socket buf)))
-             (when chunked
-               (with-buffer (buf :static t)
-                 (bwrite buf #.(concatenate 'string "0" +crlf+ +crlf+))
-                 (fast-write client-socket buf))))
-        ;; cleanup forms of unwind-protect
-        (close body)
-        (ignore-errors (close res-body))
-        (loop for o in after-reply
-              if o
-                do (funcall o)))
+               (loop for part in res-body
+                     do (typecase part
+                          (string
+                           (with-buffer (buf :static t)
+                             (if chunked
+                                 (progn
+                                   (bwrite buf (format nil "~x" (bytesize part))
+                                           +crlf+ part +crlf+))
+                                 (bwrite buf part))
+                             (fast-write client-socket buf)))
+                          (t
+                           (fast-write client-socket part))))
+               (when chunked
+                 (with-buffer (buf :static t)
+                   (bwrite buf #.(concatenate 'string "0" +crlf+ +crlf+))
+                   (fast-write client-socket buf))))
+          ;; cleanup forms of unwind-protect
+          (close body)
+          (ignore-errors (close res-body))
+          (loop for o in after-reply
+                if o
+                  do (funcall o))))
       keep-alive)))
 
 (defmethod lowlevel-error ((self server) error)
@@ -339,7 +349,10 @@
 
 (defun fast-write (socket buffer)
   (let ((fd (fd-of socket))
-        (vector (fast-io::finish-output-buffer buffer)))
+        (vector (typecase buffer
+                  (fast-io::output-buffer
+                   (fast-io::finish-output-buffer buffer))
+                  (t buffer))))
     (flet ((w (pointer length)
              (loop
                (handler-case
@@ -355,4 +368,5 @@
                    then (static-vectors::inc-pointer pointer write-size)
                  for write-size = (w pointer length)
                  while (plusp (decf length write-size)))
-        (static-vectors:free-static-vector vector)))))
+        (when (typep buffer 'fast-io::output-buffer)
+          (static-vectors:free-static-vector vector))))))
