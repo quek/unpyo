@@ -8,27 +8,23 @@
 (defclass scratch-app (app-routes-mixin)
   ())
 
-(defvar *server* (make-instance 'server :app (make-instance 'scratch-app)))
+(defvar *server* (make-server :app (make-instance 'scratch-app)))
 
-(unpyo::add-tcp-listener *server* "localhost" 8889)
-
-(run *server* :background t)
+(run *server*)
+;; (stop *server*)
 
 
 (defun dump-env ()
-  (html
-    (:ul
-        (maphash (lambda (k v)
-                   (html (:li (:pre k " => " v))))
-                 (env-of *request*)))))
+  (html (:ul (maphash (lambda (k v)
+                        (html (:li (:pre k " => " v))))
+                      (env-of *request*)))))
 
 (defmacro default-template ((&key (title "title")) &body body)
   `(html
      (:html
        (:meta :charset "utf-8")
        (:title ,title))
-     (:body
-         ,@body)))
+     (:body ,@body)))
 
 (defaction root (:path "/")
   (default-template (:title "サンプルのトップ")

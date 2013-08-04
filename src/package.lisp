@@ -13,7 +13,7 @@
 
           #:defaction
 
-          #:server
+          #:make-server
           #:run
           #:stop
 

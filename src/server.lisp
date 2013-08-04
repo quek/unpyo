@@ -370,3 +370,8 @@
                  while (plusp (decf length write-size)))
         (when (typep buffer 'fast-io::output-buffer)
           (static-vectors:free-static-vector vector))))))
+
+(defun make-server (&key (app (make-instance 'status-app)) (port 1958) (host "localhost"))
+  (let ((server (make-instance 'server :app app)))
+    (add-tcp-listener server host port)
+    server))
