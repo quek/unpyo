@@ -80,9 +80,9 @@
        most-negative-fixnum))
 
 (defun url-to-action (url)
-  (collect-first (choose (let ((route (scan *routes*)))
-                           (if (funcall (route-function route) url)
-                               (route-action route))))))
+  (loop for route in *routes*
+        if (funcall (route-function route) url)
+          do (return-from url-to-action (route-action route))))
 
 (defclass app-routes-mixin ()
   ())

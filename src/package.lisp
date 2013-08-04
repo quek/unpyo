@@ -1,7 +1,6 @@
 ;;;; package.lisp
 
-(info.read-eval-print.series-ext:sdefpackage
- :unpyo
+(defpackage :unpyo
  (:use :cl :anaphora)
  (:import-from :info.read-eval-print.html #:html)
  (:export #:call

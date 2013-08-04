@@ -76,10 +76,7 @@
       (:body
           (:p (local-time:now))
         (:p "[" @a"]")
-        (:pre
-            (collect
-                (multiple-value-bind (key value) (scan-hash (slot-value *request* 'env))
-                  (format nil "~%~a = ~a" key value))))))))
+        (dump-env)))))
 
 (defaction /form/file ()
   (html
