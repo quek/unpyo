@@ -9,7 +9,15 @@
           #:*request*
           #:env
           #:env-of
+          #:status
           #:param
+          #:header
+          #:redirect
+          #:redirect-permanetly
+          #:request-uri
+          #:content-type
+          #:authorization
+          #:require-authorization
 
           #:defaction
 

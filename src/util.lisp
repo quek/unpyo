@@ -110,6 +110,18 @@
 (defun monotonic-time ()
   (iolib.syscalls:get-monotonic-time))
 
+(defun quote-string (string)
+  "Quotes string according to RFC 2616's definition of `quoted-string'."
+  (with-output-to-string (out)
+    (with-input-from-string (in string)
+      (loop for char = (read-char in nil nil)
+            while char
+            unless (or (char< char #\Space)
+                       (char= char #\Rubout))
+              do (case char
+                   ((#\\) (write-string "\\\\" out))
+                   ((#\") (write-string "\\\"" out))
+                   (otherwise (write-char char out)))))))
 
 (defvar *invoke-debugger-p* t)
 

@@ -40,4 +40,5 @@
                :flexi-streams
                :info.read-eval-print.series-ext
                :com.informatimago.common-lisp.http
-               :info.read-eval-print.html))
+               :info.read-eval-print.html
+               :cl-base64))

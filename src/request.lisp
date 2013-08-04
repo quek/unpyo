@@ -35,7 +35,14 @@
 
 (defun (setf param) (value &rest keys)
   (with-slots (params) *request*
-    (setf params (%%prepare-params keys value params))))
+    (setf params
+          (%%prepare-params
+           (mapcar (lambda (x)
+                     (typecase x
+                       (string x)
+                       (t (string-downcase x))))
+                   keys)
+           value params))))
 
 (defun %param (params &rest keys)
   (reduce (lambda (value key)
@@ -67,8 +74,8 @@
   (let (params)
    (loop for %k=%v in (split-sequence:split-sequence #\& query-string)
          for (%k %v) = (split-sequence:split-sequence #\= %k=%v)
-         for k = (percent-encoding:decode %k :encoding external-format)
-         for v = (percent-encoding:decode %v :encoding external-format)
+         for k = (percent-encoding:decode %k :encoding external-format :www-form t)
+         for v = (percent-encoding:decode %v :encoding external-format :www-form t)
          for ks = (mapcar (lambda (x) (string-right-trim "]" x))
                           (split-sequence:split-sequence #\[ k))
          do (setf params (%%prepare-params ks v params)))
@@ -136,3 +143,45 @@
                                             (map '(vector (unsigned-byte 8) *) #'char-code contents)
                                             :external-format external-format)))))
                params))))))
+
+(defun status ()
+  (status-of *request*))
+
+(defun (setf status) (value)
+  (setf (status-of *request*) value))
+
+(defun header (key)
+  (cdr (assoc key (response-headers-of *request*) :test #'string-equal)))
+
+(defun (setf header) (value key)
+  (with-slots (response-headers) *request*
+    (aif (assoc key response-headers :test #'string-equal)
+         (rplacd it value)
+         (setf response-headers (acons key value response-headers)))))
+
+(defun redirect (url)
+  (setf (status-of *request*) 302)
+  (setf (header "Location") url))
+
+(defun redirect-permanently (url)
+  (setf (status-of *request*) 301)
+  (setf (header "Location") url))
+
+(defun request-uri ()
+  (env "REQUEST_URI"))
+
+(defun (setf content-type) (value)
+  (setf (header "Content-Type") value))
+
+(defun authorization ()
+  (let ((authorization (env "Authorization")))
+    (ppcre:register-groups-bind (data) ("Basic \(.*\)" authorization)
+      (let ((user-password (base64:base64-string-to-string data)))
+        (awhen (position #\: user-password)
+          (values (subseq user-password 0 it)
+                  (subseq user-password (1+ it))))))))
+
+(defun require-authorization (&optional (realm "Unpyo"))
+  (setf (status) 401
+        (header "WWW-Authenticate")
+        (format nil "Basic realm=\"~A\"" (quote-string realm))))

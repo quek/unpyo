@@ -357,7 +357,6 @@
              (loop
                (handler-case
                    (progn
-                     (print 'fast-write)
                      (return (isys:write fd pointer length)))
                  (isys:ewouldblock ()
                    (print 'fast-write-ewouldblock)

@@ -69,7 +69,8 @@
                     for bind in binds
                     do (setf (param bind)
                              (percent-encoding:decode
-                              group :encoding (external-format-of *request*))))
+                              group :encoding (external-format-of *request*)
+                                    :www-form t)))
               t))))
       (lambda (url) (equal url path))))
 
