@@ -14,11 +14,11 @@
                (:file "condition")
                (:file "const")
                (:file "buffer")
+               (:file "client")
                (:file "thread-pool")
                (:file "events")
                (:file "reactor")
                (:file "parser")
-               (:file "client")
                (:file "binder")
                (:file "response-mixin")
                (:file "request")
@@ -34,7 +34,7 @@
                :rfc2388
                :split-sequence
                :cl-ppcre
-               :queues.simple-queue
+               :sb-concurrency
                :temporary-file
                :fast-io
                :flexi-streams

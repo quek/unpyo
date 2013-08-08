@@ -1,5 +1,7 @@
 (in-package #:unpyo)
 
+(require :sb-concurrency)
+
 (defmacro with-thread-pool-lock (thread-pool &body body)
   `(bt:with-lock-held ((slot-value ,thread-pool 'lock))
      ,@body))
@@ -7,7 +9,7 @@
 (defclass thread-pool ()
   ((min :initarg :min :initform 1)
    (max :initarg :max :initform 1)
-   (todo :initform (queues:make-queue :simple-queue))
+   (todo :initform (sb-concurrency:make-queue))
    (process :initarg :process)
    (auto-trim :initform nil)
    (trim-requested :initform 0 :reader trim-requested-of)
@@ -28,7 +30,7 @@
 (defmethod backlog ((self thread-pool))
   (with-thread-pool-lock self
     (with-slots (todo) self
-      (queues:qsize todo))))
+      (sb-concurrency:queue-count todo))))
 
 (defmethod spawn-thread ((self thread-pool))
   "Must be called with-thread-pool-lock!"
@@ -42,7 +44,7 @@
                     with continue = t
                     with buffer = (make-buffer :static t)
                     do (with-thread-pool-lock self
-                         (loop while (zerop (queues:qsize todo))
+                         (loop while (sb-concurrency:queue-empty-p todo)
                                do (when (plusp trim-requested)
                                     (decf trim-requested)
                                     (setf continue nil)
@@ -54,7 +56,9 @@
                                   (bt:condition-wait condition-variable lock)
                                   (decf waiting))
                          (when continue
-                           (setf client (queues:qpop todo))))
+                           (let (ok)
+                             (setf (values client ok) (sb-concurrency:dequeue todo))
+                             (assert ok))))
                        (unless continue (loop-finish))
                        (cook-client self client buffer))
               (with-thread-pool-lock self
@@ -86,12 +90,12 @@
                 (<< reactor client))))))))
 
 
-(defmethod << ((self thread-pool) work)
+(defmethod << ((self thread-pool) (client client))
   (with-thread-pool-lock self
     (with-slots (condition-variable max spawned todo waiting shutdown) self
       (when shutdown
-        (error "Unable to add work while shutting down"))
-      (queues:qpush todo work)
+        (error "Unable to add client while shutting down"))
+      (sb-concurrency:enqueue client todo)
       (when (and (zerop waiting)
                  (< spawned max))
         (spawn-thread self))
