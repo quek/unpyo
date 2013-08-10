@@ -70,7 +70,6 @@
 (defmethod cook-client ((self thread-pool) client buffer)
   (with-slots (server) self
     (with-slots (events reactor) server
-      (print 'eagerly-finish--from-thread-pool-cook-client)
       (handler-case
           (eagerly-finish client)
         (http-parse-error (e)
@@ -84,7 +83,6 @@
           (if process-now
               (process-client server client buffer)
               (progn
-                (print 'not-precss-now)
                 (set-timeout client (slot-value server 'first-data-timeout))
                 (dd "add ~a to reactor from cook-client" client)
                 (<< reactor client))))))))

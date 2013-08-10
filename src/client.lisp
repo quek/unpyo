@@ -51,7 +51,6 @@
                          :format-control "HEADER is longer than allowed, aborting client early."))
                  (t nil)))
           ((and fast-check (io-select (list io) :timeout +fast-track-ka-timeout+))
-           (print 'try-to-finish--from-client-reset)
            (try-to-finish self))
           (t nil))))
 
@@ -73,15 +72,12 @@
       (setf (gethash "CONTENT_LENGTH" env) it))))
 
 (defmethod eagerly-finish ((self client))
-  (print 'eagerly-finish)
   (with-slots (ready io) self
     (cond (ready
            t)
           ((not (iomux:wait-until-fd-ready (fd-of io) :input 0 nil))
-           (print 'io-not-ready)
            nil)
           (t
-           (print 'tri-to-finish--from-eagerly-finish)
            (try-to-finish self)))))
 
 (defmethod try-to-finish ((self client))

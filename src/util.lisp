@@ -137,5 +137,8 @@
      ,@body))
 
 
+#+nil
 (defun dd (str &rest args)
   (apply #'format *trace-output* (concatenate 'string "~&" str) args))
+(defun dd (str &rest args)
+  (declare (ignore str args)))

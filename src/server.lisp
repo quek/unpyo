@@ -107,7 +107,6 @@
        nil))))
 
 (defmethod process-client ((self server) client buffer)
-  (print 'process-client)
   (with-slots (events persistent-timeout reactor status) self
     (let ((close-socket t))
       (unwind-protect
@@ -176,7 +175,6 @@
       "80"))
 
 (defmethod handle-request ((self server) client buffer)
-  (print 'handle-request)
   (with-slots (app events) self
     (let* ((env (env-of client))
            (client-socket (io-of client))
