@@ -21,8 +21,8 @@
     (format stderr
            "~a: HTTP parse error, malformaed request (~a): ~a"
            (local-time:now)
-           (or (value env "HTTP_X_FORWARDED_FOR")
-               (value env "REMOTE_ADDR"))
+           (or (gethash "HTTP_X_FORWARDED_FOR" env)
+               (gethash "REMOTE_ADDR" env))
            error)
     (format stderr
             "~a: ENV: ~a~&---~&"

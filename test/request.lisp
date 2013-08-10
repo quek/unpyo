@@ -50,6 +50,13 @@
       (is (= size read-size))
       (is (equal (subseq data 0 20) (subseq (babel:octets-to-string buffer) 0 20))))))
 
+(test head-http/1.1
+  (iolib.sockets:with-open-socket (s :remote-host *test-host* :remote-port *test-port*)
+    (format s "HEAD / HTTP/1.1~aHost:localhost~a~a" +crlf+ +crlf+ +crlf+)
+    (force-output s)
+    (is (string= "HTTP/1.1 200 OK" (line s)))
+    (let ((env (env-of *app*)))
+      (is (string= "HEAD" (gethash "REQUEST_METHOD" env))))))
 
 (with-test-server (server)
   (debug!))

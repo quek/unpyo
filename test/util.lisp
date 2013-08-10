@@ -26,8 +26,7 @@
 (defvar *app* (make-instance 'test-app))
 
 (defmacro with-test-server ((server) &body body)
-  `(let ((,server (make-instance 'unpyo:server :app *app*)))
-     (unpyo::add-tcp-listener ,server *test-host* *test-port*)
+  `(let ((,server (unpyo:make-server :app *app* :port *test-port* :host *test-host*)))
      (unpyo:run ,server)
      (unwind-protect
           (progn ,@body)

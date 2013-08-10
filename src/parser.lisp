@@ -46,6 +46,15 @@
             ((request-method-matche-p "POST" buffer start)
              (setf (gethash "REQUEST_METHOD" env) "POST")
              (parse-request-uri buffer (+ start 5) end env))
+            ((request-method-matche-p "HEAD" buffer start)
+             (setf (gethash "REQUEST_METHOD" env) "HEAD")
+             (parse-request-uri buffer (+ start 5) end env))
+            ((request-method-matche-p "PUT" buffer start)
+             (setf (gethash "REQUEST_METHOD" env) "PUT")
+             (parse-request-uri buffer (+ start 4) end env))
+            ((request-method-matche-p "DELETE" buffer start)
+             (setf (gethash "REQUEST_METHOD" env) "DELETE")
+             (parse-request-uri buffer (+ start 7) end env))
             (t (error 'http-parse-error :format-control "Invalid REQUEST_METHOD :buffer ~a :start ~a"
                                         :format-arguments (list buffer start))))))
 

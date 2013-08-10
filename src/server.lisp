@@ -266,7 +266,7 @@
                                      do (bwrite buffer k +colon+ v +crlf+)))))
 
                (when no-body
-                 (bwrite +crlf+ buffer)
+                 (bwrite buffer +crlf+)
                  (fast-write client-socket buffer)
                  (return-from handle-request keep-alive))
 
