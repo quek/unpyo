@@ -30,7 +30,13 @@
   (default-template (:title "サンプルのトップ")
     (:h1 "サンプル")
     (:ul
-        (loop for path in (sort (mapcar #'unpyo::route-path unpyo::*routes*) #'string<=)
+        (loop for path in (sort
+                           (mapcar #'unpyo::route-path
+                                   (remove-if (lambda (x)
+                                                (not (or (null (unpyo::route-method x))
+                                                         (eq (unpyo::route-method x) :get))))
+                                              unpyo::*routes*))
+                           #'string<=)
               do (html (:li (:a :href path path)))))))
 
 (defaction /env ()
@@ -55,17 +61,17 @@
         (:pre
             (with-output-to-string (*standard-output*) (room)))))))
 
-(defaction /form/a ()
+(defaction /form/a (:method :get)
   (html
     (:html
       (:head
           (:meta :charset :utf-8))
       (:body
-          (:form :action "/form/aa" :method :post
+          (:form :action "/form/a" :method :post
             (:input :type :text :name :a :value "あいう")
             (:input :type :submit :value "サブミット"))))))
 
-(defaction /form/aa ()
+(defaction /form/a (:method :post)
   (html
     (:html
       (:body
@@ -73,18 +79,18 @@
         (:p "[" @a"]")
         (dump-env)))))
 
-(defaction /form/file ()
+(defaction /form/file (:method :get)
   (html
     (:html
       (:head
           (:meta :charset :utf-8))
       (:body
-          (:form :action "/form/filex" :method :post :enctype "multipart/form-data"
+          (:form :action "/form/file" :method :post :enctype "multipart/form-data"
             (:input :type :text :name "a" :value "あいう")
             (:input :type :file :name "file")
             (:input :type :submit :value "サブミット"))))))
 
-(defaction /form/filex ()
+(defaction /form/file (:method :post)
   (when @file
     (alexandria:copy-file (car @file) "/tmp/unpyo-scranch-upload-file"))
   (html

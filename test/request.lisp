@@ -58,5 +58,21 @@
     (let ((env (env-of *app*)))
       (is (string= "HEAD" (gethash "REQUEST_METHOD" env))))))
 
+(unpyo:defaction /method (:method :get)
+  (unpyo:html "method is get"))
+(unpyo:defaction /method (:method :post)
+  (unpyo:html "method is post"))
+(unpyo:defaction /method (:method :put)
+  (unpyo:html "method is put"))
+(unpyo:defaction /method (:method :delete)
+  (unpyo:html "method is delete"))
+
+(test defaction-method
+  (is (ppcre:scan "method is get" (drakma:http-request (test-url "/method") :method :get)))
+  (is (ppcre:scan "method is post" (drakma:http-request (test-url "/method") :method :post)))
+  (is (ppcre:scan "method is put" (drakma:http-request (test-url "/method") :method :put)))
+  (is (ppcre:scan "method is delete" (drakma:http-request (test-url "/method") :method :delete))))
+
+
 (with-test-server (server)
   (debug!))

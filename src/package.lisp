@@ -8,6 +8,7 @@
           #:*request*
           #:env
           #:env-of
+          #:app-of
           #:status
           #:param
           #:header

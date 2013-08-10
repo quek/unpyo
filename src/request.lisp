@@ -3,7 +3,7 @@
 (defvar *request* nil "a request object.")
 
 (defclass request (response-mixin)
-  ((app :initarg :app)
+  ((app :initarg :app :reader app-of)
    (env :initarg :env :reader env-of)
    (io :initarg :io :reader io-of)
    (params)
@@ -72,13 +72,15 @@
 
 (defun %prepare-params (query-string external-format)
   (let (params)
-   (loop for %k=%v in (split-sequence:split-sequence #\& query-string)
-         for (%k %v) = (split-sequence:split-sequence #\= %k=%v)
-         for k = (percent-encoding:decode %k :encoding external-format :www-form t)
-         for v = (percent-encoding:decode %v :encoding external-format :www-form t)
-         for ks = (mapcar (lambda (x) (string-right-trim "]" x))
-                          (split-sequence:split-sequence #\[ k))
-         do (setf params (%%prepare-params ks v params)))
+    (loop for %k=%v in (split-sequence:split-sequence #\& query-string)
+          for (%k %v) = (split-sequence:split-sequence #\= %k=%v)
+          for k = (percent-decode %k external-format)
+          for v = (percent-decode %v external-format)
+          when (and k v)
+            do (setf params (%%prepare-params
+                             (mapcar (lambda (x) (string-right-trim "]" x))
+                                     (split-sequence:split-sequence #\[ k))
+                             v params)))
     params))
 
 (defun %%prepare-params (ks v params)
@@ -141,7 +143,7 @@
                                                    (rfc2388:content-type part :as-string t)))
                                            (babel:octets-to-string
                                             (map '(vector (unsigned-byte 8) *) #'char-code contents)
-                                            :external-format external-format)))))
+                                            :encoding external-format)))))
                params))))))
 
 (defun status ()
