@@ -46,7 +46,8 @@
             ((request-method-matche-p "POST" buffer start)
              (setf (gethash "REQUEST_METHOD" env) "POST")
              (parse-request-uri buffer (+ start 5) end env))
-            (t (error 'invalid-request)))))
+            (t (error 'http-parse-error :format-control "Invalid REQUEST_METHOD :buffer ~a :start ~a"
+                                        :format-arguments (list buffer start))))))
 
 (defun parse-request-uri (buffer start end env)
   (aif (position #x20 buffer :start start :end end)
