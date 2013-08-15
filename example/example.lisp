@@ -19,7 +19,7 @@
                         (html (:li (:pre k " => " v))))
                       (env-of *request*)))))
 
-(defmacro default-template ((&key (title "title")) &body body)
+(defmacro with-default-template ((&key (title "title")) &body body)
   `(html
      (:html
        (:meta :charset "utf-8")
@@ -27,7 +27,7 @@
      (:body ,@body)))
 
 (defaction root (:path "/")
-  (default-template (:title "サンプルのトップ")
+  (with-default-template (:title "サンプルのトップ")
     (:h1 "サンプル")
     (:ul
         (loop for path in (sort
@@ -40,36 +40,36 @@
               do (html (:li (:a :href path path)))))))
 
 (defaction /env ()
-  (default-template (:title "env の内味")
+  (with-default-template (:title "env の内味")
     (:pre (with-output-to-string (*standard-output*)
             (describe *request*)))
     (dump-env)))
 
 (defaction /hello/@who ()
-  (default-template (:title "URL からのパラメータ")
+  (with-default-template (:title "URL からのパラメータ")
     (format nil "Hello ~a!" @who)
     (:p (:a :href "/hello/あいう" "/hello/あいう"))))
 
 (defaction /room ()
-  (default-template (:title "room")
+  (with-default-template (:title "room")
     (:h1 "room")
     (:pre
         (with-output-to-string (*standard-output*) (room)))))
 
 (defaction /form/a (:method :get)
-  (default-template (:title "フォーム")
+  (with-default-template (:title "フォーム")
     (:form :action "/form/a" :method :post
       (:input :type :text :name :a :value "あいう")
       (:input :type :submit :value "サブミット"))))
 
 (defaction /form/a (:method :post)
-  (default-template (:title "フォームの先")
+  (with-default-template (:title "フォームの先")
     (:p (local-time:now))
     (:p "[" @a "]")
     (dump-env)))
 
 (defaction /form/file (:method :get)
-  (default-template (:title "画像のアップロード")
+  (with-default-template (:title "画像のアップロード")
     (:form :action "/form/file" :method :post :enctype "multipart/form-data"
       (:input :type :text :name "a" :value "あいう")
       (:input :type :file :name "file")
@@ -78,7 +78,7 @@
 (defaction /form/file (:method :post)
   (when @file
     (alexandria:copy-file (car @file) "/tmp/unpyo-scranch-upload-file"))
-  (default-template (:title "画像のアップロード先")
+  (with-default-template (:title "画像のアップロード先")
     (:p "[" @a "]")
     (:pre @file)
     (:pre (format nil "~s" (slot-value *request* 'unpyo::params)))
