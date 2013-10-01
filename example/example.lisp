@@ -5,7 +5,7 @@
 
 (in-package :unpyo.example)
 
-(defclass scratch-app (app-routes-mixin)
+(defclass scratch-app (application)
   ())
 
 (defvar *server* (make-server :app (make-instance 'scratch-app)))

@@ -24,7 +24,8 @@
                (:file "request")
                (:file "server")
                (:file "action")
-               (:file "app"))
+               (:file "app")
+               (:file "form"))
   :depends-on (:anaphora
                :local-time
                :trivial-backtrace

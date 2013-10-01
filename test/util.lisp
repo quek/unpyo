@@ -13,7 +13,7 @@
 (defun emit (stream format &rest args)
   (apply #'format stream (format nil "~a~a" format +crlf+) args))
 
-(defclass test-app (unpyo:app-routes-mixin)
+(defclass test-app (unpyo:application)
   ((env :accessor env-of)
    (call-back :initform #'identity :accessor call-back-of)))
 

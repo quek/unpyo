@@ -1,5 +1,14 @@
 (in-package :unpyo)
 
+(defvar *application* nil)
+
+(defclass application (app-routes-mixin)
+  ())
+
+(defmethod call :around ((app application))
+  (let ((*application* app))
+    (call-next-method)))
+
 (defclass status-app ()
   ())
 

@@ -25,6 +25,7 @@
           #:run
           #:stop
 
-          #:app-routes-mixin
+          #:application
+          #:*application*
 
           #:*invoke-debugger-p*))
