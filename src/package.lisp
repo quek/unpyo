@@ -18,6 +18,7 @@
           #:content-type
           #:authorization
           #:require-authorization
+          #:cookie
 
           #:defaction
 

@@ -161,6 +161,12 @@
          (rplacd it value)
          (setf response-headers (acons key value response-headers)))))
 
+(defun (setf cookie) (value name &key expires path domain secure http-only)
+  (push
+   (make-cookie :name name :value value :expires expires :path path
+                :domain domain :secure secure :http-only http-only)
+   (slot-value *request* 'set-cookies)))
+
 (defun redirect (url)
   (setf (status-of *request*) 302)
   (setf (header "Location") url))

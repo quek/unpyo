@@ -58,6 +58,39 @@
     (let ((env (env-of *app*)))
       (is (string= "HEAD" (gethash "REQUEST_METHOD" env))))))
 
+
+(unpyo:defaction /set-cookie ()
+  (setf (unpyo:cookie "foo") "bar")
+  (setf (unpyo:cookie "あ い;,う"
+                      :expires (local-time:encode-timestamp 0 1 2 3 4 5 2014
+                                                            :timezone local-time:+gmt-zone+)
+                      :path "/a"
+                      :domain *test-host*
+                      :secure t
+                      :http-only t)
+        "か き;,く"))
+
+(test set-cookie
+  (let ((cookie-jar (make-instance 'drakma:cookie-jar)))
+    (print (multiple-value-list (drakma:http-request (test-url "/set-cookie") :cookie-jar cookie-jar)))
+    (let ((cookies (drakma:cookie-jar-cookies cookie-jar)))
+      (is (= 2 (length cookies)))
+      (let ((foo (find "foo" cookies :key #'drakma:cookie-name :test #'string=)))
+        (is (string= "bar" (drakma:cookie-value foo)))
+        (is (null (drakma:cookie-expires foo)))
+        (is (eq nil (drakma:cookie-securep foo)))
+        (is (eq nil (drakma:cookie-http-only-p foo))))
+      (let ((x (find "あ い;,う" cookies :key #'(lambda (x)
+                                                  (unpyo::percent-decode
+                                                   (drakma:cookie-name x) :utf-8))
+                                         :test #'string=)))
+        (is (string= "か き;,く" (unpyo::percent-decode (drakma:cookie-value x) :utf-8)))
+        (is (string= "/a" (drakma:cookie-path x)))
+        (is (string= *test-host* (drakma:cookie-domain x)))
+        (is (eq t (drakma:cookie-securep x)))
+        (is (eq t (drakma:cookie-http-only-p x)))))))
+
+
 (unpyo:defaction /method (:method :get)
   (unpyo:html "method is get"))
 (unpyo:defaction /method (:method :post)

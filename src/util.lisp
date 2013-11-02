@@ -7,6 +7,9 @@
   (when string
     (percent-encoding:decode string :encoding external-format :www-form t)))
 
+(defun percent-encode (string external-format)
+  (percent-encoding:encode string :encoding external-format :www-form t))
+
 (defun split-once (delimiter sequence)
   (let ((position (position delimiter sequence)))
     (if position

@@ -2,8 +2,15 @@
 
 (defclass response-mixin (trivial-gray-streams:fundamental-character-output-stream)
   ((status :initform 200 :accessor status-of)
-   (response-headers :initform (list (cons "Content-Type" "text/html")) :accessor response-headers-of)
+   (response-headers :initform (list (cons "Content-Type" "text/html")) )
+   (set-cookies :initform ())
    (body :initform ())))
+
+(defmethod response-headers-of ((self response-mixin))
+  (append (slot-value self 'response-headers)
+          (mapcar (lambda (cookie)
+                    (cons "Set-Cookie" (princ-to-string cookie)))
+                  (slot-value self 'set-cookies))))
 
 (defmethod trivial-gray-streams:stream-write-sequence ((response-mixin response-mixin) seq start end &key)
   (with-slots (body) response-mixin

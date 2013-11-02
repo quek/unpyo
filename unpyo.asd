@@ -20,6 +20,7 @@
                (:file "reactor")
                (:file "parser")
                (:file "binder")
+               (:file "cookie")
                (:file "response-mixin")
                (:file "request")
                (:file "server")
