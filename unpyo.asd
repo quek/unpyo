@@ -21,6 +21,7 @@
                (:file "parser")
                (:file "binder")
                (:file "cookie")
+               (:file "session")
                (:file "response-mixin")
                (:file "request")
                (:file "server")
@@ -42,4 +43,5 @@
                :flexi-streams
                :com.informatimago.common-lisp.http
                :info.read-eval-print.html
-               :cl-base64))
+               :cl-base64
+               :ironclad))

@@ -59,6 +59,22 @@
       (is (string= "HEAD" (gethash "REQUEST_METHOD" env))))))
 
 
+(unpyo:defaction /method (:method :get)
+  (unpyo:html "method is get"))
+(unpyo:defaction /method (:method :post)
+  (unpyo:html "method is post"))
+(unpyo:defaction /method (:method :put)
+  (unpyo:html "method is put"))
+(unpyo:defaction /method (:method :delete)
+  (unpyo:html "method is delete"))
+
+(test defaction-method
+  (is (ppcre:scan "method is get" (drakma:http-request (test-url "/method") :method :get)))
+  (is (ppcre:scan "method is post" (drakma:http-request (test-url "/method") :method :post)))
+  (is (ppcre:scan "method is put" (drakma:http-request (test-url "/method") :method :put)))
+  (is (ppcre:scan "method is delete" (drakma:http-request (test-url "/method") :method :delete))))
+
+
 (unpyo:defaction /set-cookie ()
   (setf (unpyo:cookie "foo") "bar")
   (setf (unpyo:cookie "あ い;,う"
@@ -72,7 +88,7 @@
 
 (test set-cookie
   (let ((cookie-jar (make-instance 'drakma:cookie-jar)))
-    (print (multiple-value-list (drakma:http-request (test-url "/set-cookie") :cookie-jar cookie-jar)))
+    (drakma:http-request (test-url "/set-cookie") :cookie-jar cookie-jar)
     (let ((cookies (drakma:cookie-jar-cookies cookie-jar)))
       (is (= 2 (length cookies)))
       (let ((foo (find "foo" cookies :key #'drakma:cookie-name :test #'string=)))
@@ -91,21 +107,20 @@
         (is (eq t (drakma:cookie-http-only-p x)))))))
 
 
-(unpyo:defaction /method (:method :get)
-  (unpyo:html "method is get"))
-(unpyo:defaction /method (:method :post)
-  (unpyo:html "method is post"))
-(unpyo:defaction /method (:method :put)
-  (unpyo:html "method is put"))
-(unpyo:defaction /method (:method :delete)
-  (unpyo:html "method is delete"))
+(unpyo:defaction /set-session ()
+  (setf (unpyo:session "foo") '(1 2 3)))
 
-(test defaction-method
-  (is (ppcre:scan "method is get" (drakma:http-request (test-url "/method") :method :get)))
-  (is (ppcre:scan "method is post" (drakma:http-request (test-url "/method") :method :post)))
-  (is (ppcre:scan "method is put" (drakma:http-request (test-url "/method") :method :put)))
-  (is (ppcre:scan "method is delete" (drakma:http-request (test-url "/method") :method :delete))))
+(unpyo:defaction /get-session ()
+  (let ((foo (unpyo:session "foo")))
+    (push 0 foo)
+   (unpyo:html foo)))
 
+(test session
+  (let ((cookie-jar (make-instance 'drakma:cookie-jar)))
+    (drakma:http-request (test-url "/set-session") :cookie-jar cookie-jar)
+    (is (equal "(0 1 2 3)
+"
+               (drakma:http-request (test-url "/get-session") :cookie-jar cookie-jar)))))
 
 (with-test-server (server)
   (debug!))

@@ -4,7 +4,7 @@
   name
   value
   expires
-  path
+  (path "/")
   domain
   secure
   http-only)

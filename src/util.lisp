@@ -117,6 +117,9 @@
 (defun string-to-octets (string)
   (babel:string-to-octets string))
 
+(defun octets-to-string (octets)
+  (babel:octets-to-string octets))
+
 (defun monotonic-time ()
   (iolib.syscalls:get-monotonic-time))
 
@@ -145,6 +148,23 @@
 (defmacro with-debugger (&body body)
   `(handler-bind ((error #'my-debugger))
      ,@body))
+
+
+(defun get-cipher (key)
+  (ironclad:make-cipher
+   :blowfish :mode :ecb :key (string-to-octets key)))
+
+(defun encrypt (plaintext key)
+  (let ((cipher (get-cipher key))
+        (msg (string-to-octets plaintext)))
+    (ironclad:encrypt-in-place cipher msg)
+    (ironclad:octets-to-integer msg)))
+
+(defun decrypt (ciphertext-int key)
+  (let ((cipher (get-cipher key))
+        (msg (ironclad:integer-to-octets ciphertext-int)))
+    (ironclad:decrypt-in-place cipher msg)
+    (octets-to-string msg)))
 
 
 #+nil

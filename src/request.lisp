@@ -163,18 +163,19 @@
 
 (defun (setf cookie) (value name &key expires path domain secure http-only)
   (push
-   (make-cookie :name name :value value :expires expires :path path
+   (make-cookie :name name :value (princ-to-string value) :expires expires :path path
                 :domain domain :secure secure :http-only http-only)
    (slot-value *request* 'set-cookies)))
 
 (defun cookie (name)
-  (awhen (header "Cookie")
-    (percent-decode (cadr (find name (mapcar (lambda (x)
-                                               (cl-ppcre:split "=" x :limit 2))
-                                             (cl-ppcre:split ";\\s*" it))
-                                :test #'string=
-                                :key #'car))
-                    :utf-8)))
+  (awhen (env "Cookie")
+    (read-from-string
+     (percent-decode (cadr (find name (mapcar (lambda (x)
+                                                (cl-ppcre:split "=" x :limit 2))
+                                              (cl-ppcre:split ";\\s*" it))
+                                 :test #'string=
+                                 :key #'car))
+                     :utf-8))))
 
 (defun redirect (url)
   (setf (status-of *request*) 302)

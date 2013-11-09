@@ -19,6 +19,7 @@
           #:authorization
           #:require-authorization
           #:cookie
+          #:session
 
           #:defaction
 
