@@ -24,7 +24,7 @@
 
 (defun %epoll-ctl (fd epfd op &rest events)
   (cffi:with-foreign-object (ev '(:struct isys:epoll-event))
-    (isys:bzero ev isys:size-of-epoll-event)
+    (isys:bzero ev (isys:sizeof 'isys:epoll-event))
     (setf (cffi:foreign-slot-value ev '(:struct isys:epoll-event) 'isys:events)
           (apply #'logior events))
     (let ((epoll-data (cffi:foreign-slot-value ev '(:struct isys:epoll-event) 'isys:data)))
@@ -50,12 +50,12 @@
             for fd = (fd-of socket)
             do (%epoll-ctl fd epoll-fd isys:epoll-ctl-add isys:epollin isys:epollpri)
                (setf (gethash fd hash) socket))
-      (cffi:with-foreign-object (events '(:struct isys:epoll-event) iomux::+epoll-max-events+)
-        (isys:bzero events (* iomux::+epoll-max-events+ isys:size-of-epoll-event))
+      (cffi:with-foreign-object (events '(:struct isys:epoll-event) (1- isys:fd-setsize))
+        (isys:bzero events (* (1- isys:fd-setsize) (isys:sizeof 'isys:epoll-event)))
         (let ((ready-fds
                 (isys:repeat-upon-condition-decreasing-timeout
                     ((isys:eintr) tmp-timeout timeout)
-                  (isys:epoll-wait epoll-fd events iomux::+epoll-max-events+
+                  (isys:epoll-wait epoll-fd events (1- isys:fd-setsize)
                                    (iomux::timeout->milliseconds tmp-timeout)))))
           (macrolet ((epoll-slot (slot-name)
                        `(cffi:foreign-slot-value (cffi:mem-aref events 'isys:epoll-event i)
