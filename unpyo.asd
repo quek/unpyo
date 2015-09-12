@@ -27,6 +27,7 @@
                (:file "server")
                (:file "action")
                (:file "app")
+               (:file "static-app")
                (:file "form"))
   :depends-on (:anaphora
                :local-time

@@ -27,7 +27,8 @@
           #:run
           #:stop
 
-          #:application
           #:*application*
+          #:application
+          #:static-application
 
           #:*invoke-debugger-p*))

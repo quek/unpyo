@@ -39,7 +39,7 @@
                                                      t))
                                                  sockets)))
                        (#.+reactor-shutdown-command+
-                        (return-from run nil)))) )
+                        (return-from run nil)))))
                  (progn
                    (when (timeout-at-of c)
                      (bt:with-lock-held (mutex)
@@ -55,6 +55,10 @@
                        (write-400 c)
                        (close c)
                        (evets-parse-error events server (env-of c) e))
+                     (connection-error (e)
+                       (declare (ignore e))
+                       (setf sockets (delete c sockets))
+                       (close c))
                      (error (e)
                        (setf sockets (delete c sockets))
                        (write-500 c)

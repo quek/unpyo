@@ -20,7 +20,7 @@
 (defmacro with-@param (&body body)
   (labels ((@p (thing)
              (and (symbolp thing)
-                  (plusp (length (symbol-name thing)))
+                  (> (length (symbol-name thing)) 1)
                   (string= thing "@" :end1 1)))
            (keys (symbol)
              (mapcar (lambda (x) (intern x :keyword))

@@ -169,13 +169,12 @@
 
 (defun cookie (name)
   (awhen (env "Cookie")
-    (read-from-string
-     (percent-decode (cadr (find name (mapcar (lambda (x)
-                                                (cl-ppcre:split "=" x :limit 2))
-                                              (cl-ppcre:split ";\\s*" it))
-                                 :test #'string=
-                                 :key #'car))
-                     :utf-8))))
+    (let ((value (cadr (find name (mapcar (lambda (x)
+                                            (cl-ppcre:split "=" x :limit 2))
+                                          (cl-ppcre:split ";\\s*" it))
+                             :test #'string=
+                             :key #'car))))
+      (and value (read-from-string (percent-decode value :utf-8))))))
 
 (defun redirect (url)
   (setf (status-of *request*) 302)
