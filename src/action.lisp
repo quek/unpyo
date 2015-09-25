@@ -89,9 +89,9 @@
                  (string-equal method route-method))))))
 
 (defun compute-route-priority (path)
-  (aif (position #\@ path)
-       (- 100 (* (count #\/ (subseq path 0 it)) 10))
-       most-negative-fixnum))
+  (if (position #\@ path)
+      (- 100 (* (count #\/ path) 10))
+      most-negative-fixnum))
 
 (defun url-to-action (url method)
   (loop for route in *routes*
