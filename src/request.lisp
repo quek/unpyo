@@ -23,7 +23,7 @@
 
 
 (defun env (key &optional (request *request*))
-  (gethash key (env-of request)))
+  (and request (gethash key (env-of request))))
 
 (defun (setf env) (value key &optional (request *request*))
   (setf (gethash key (env-of request)) value))
