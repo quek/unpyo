@@ -174,7 +174,7 @@
                                           (cl-ppcre:split ";\\s*" it))
                              :test #'string=
                              :key #'car))))
-      (and value (read-from-string (percent-decode value :utf-8))))))
+      (and value (percent-decode value :utf-8)))))
 
 (defun redirect (url)
   (setf (status-of *request*) 302)

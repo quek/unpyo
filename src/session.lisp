@@ -6,7 +6,8 @@
 (defparameter *session-timeout* '(30 :minute))
 
 (defun session-alist ()
-  (let ((session (cookie *session-key*)))
+  (let* ((session-key (cookie *session-key*))
+         (session (and session-key (parse-integer session-key))))
     (when session
       (read-from-string (decrypt session *session-secret*)))))
 
