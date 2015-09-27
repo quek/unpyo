@@ -19,8 +19,15 @@
     (aif (assoc key session :test #'string-equal)
          (setf (cdr it) value)
          (setf session (acons key value session)))
-   (setf (cookie *session-key* :expires *session-timeout* :path "/")
+    (setf (cookie *session-key* :expires *session-timeout* :path "/" :http-only t)
          (encrypt (prin1-to-string session) *session-secret*))))
+
+(defun rem-session (key)
+  (let ((session (remove-if (lambda (x)
+                              (string-equal key (car x)))
+                            (session-alist))))
+    (setf (cookie *session-key* :expires *session-timeout* :path "/" :http-only t)
+          (encrypt (prin1-to-string session) *session-secret*))))
 
 #|
 (let ((test (encrypt "あほんだら羊" *session-secret*)))

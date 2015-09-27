@@ -162,19 +162,27 @@
          (setf response-headers (acons key value response-headers)))))
 
 (defun (setf cookie) (value name &key expires path domain secure http-only)
+  (setf (slot-value *request* 'set-cookies)
+        (remove-if (lambda (x)
+                     (string= name (cookie-name x)))
+                   (slot-value *request* 'set-cookies)))
   (push
    (make-cookie :name name :value (princ-to-string value) :expires expires :path path
                 :domain domain :secure secure :http-only http-only)
    (slot-value *request* 'set-cookies)))
 
 (defun cookie (name)
-  (awhen (env "Cookie")
-    (let ((value (cadr (find name (mapcar (lambda (x)
-                                            (cl-ppcre:split "=" x :limit 2))
-                                          (cl-ppcre:split ";\\s*" it))
-                             :test #'string=
-                             :key #'car))))
-      (and value (percent-decode value :utf-8)))))
+  (or
+   (loop for cookie in (slot-value *request* 'set-cookies)
+         thereis (and (string= name (cookie-name cookie))
+                        (cookie-value cookie)))
+   (awhen (env "Cookie")
+     (let ((value (cadr (find name (mapcar (lambda (x)
+                                             (cl-ppcre:split "=" x :limit 2))
+                                           (cl-ppcre:split ";\\s*" it))
+                              :test #'string=
+                              :key #'car))))
+       (and value (percent-decode value :utf-8))))))
 
 (defun redirect (url)
   (setf (status-of *request*) 302)

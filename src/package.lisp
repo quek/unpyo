@@ -20,6 +20,7 @@
           #:require-authorization
           #:cookie
           #:session
+          #:rem-session
 
           #:defaction
 
