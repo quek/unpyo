@@ -44,5 +44,6 @@
                :flexi-streams
                :com.informatimago.common-lisp.http
                :info.read-eval-print.html
+               :info.read-eval-print.css
                :cl-base64
                :ironclad))

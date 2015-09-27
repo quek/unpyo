@@ -204,7 +204,8 @@
                (handler-case
                    (progn
                      (with-debugger
-                       (let ((info.read-eval-print.html:*html-output* *request*))
+                       (let ((info.read-eval-print.html:*html-output* *request*)
+                             (info.read-eval-print.css:*css-output* *request*))
                          (call app)))
                      (setf (values status headers res-body)
                            (values (status-of *request*)
