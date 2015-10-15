@@ -4,6 +4,7 @@
 (defgeneric stop (x &key &allow-other-keys))
 
 (defgeneric call (app))
+(defgeneric 404-not-found (app))
 
 
 (defgeneric read-1 (fd))

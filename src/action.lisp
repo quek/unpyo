@@ -108,6 +108,9 @@
          (action (url-to-action url method)))
     (if action
         (funcall action)
-        (progn
-          (setf (status-of *request*) 400)
-          (html "404 not found")))))
+        (404-not-found app))))
+
+(defmethod 404-not-found ((app app-routes-mixin))
+  (setf (status-of *request*) 400)
+  (html "404 not found"))
+

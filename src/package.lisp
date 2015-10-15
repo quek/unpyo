@@ -4,6 +4,7 @@
  (:use :cl :anaphora)
  (:import-from :info.read-eval-print.html #:html)
  (:export #:call
+          #:404-not-found
           #:html
           #:*request*
           #:env
