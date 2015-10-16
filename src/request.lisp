@@ -172,17 +172,18 @@
    (slot-value *request* 'set-cookies)))
 
 (defun cookie (name)
-  (or
-   (loop for cookie in (slot-value *request* 'set-cookies)
-         thereis (and (string= name (cookie-name cookie))
-                        (cookie-value cookie)))
-   (awhen (env "Cookie")
-     (let ((value (cadr (find name (mapcar (lambda (x)
-                                             (cl-ppcre:split "=" x :limit 2))
-                                           (cl-ppcre:split ";\\s*" it))
-                              :test #'string=
-                              :key #'car))))
-       (and value (percent-decode value :utf-8))))))
+  (and *request*
+       (or
+        (loop for cookie in (slot-value *request* 'set-cookies)
+                thereis (and (string= name (cookie-name cookie))
+                             (cookie-value cookie)))
+        (awhen (env "Cookie")
+          (let ((value (cadr (find name (mapcar (lambda (x)
+                                                  (cl-ppcre:split "=" x :limit 2))
+                                                (cl-ppcre:split ";\\s*" it))
+                                   :test #'string=
+                                   :key #'car))))
+            (and value (percent-decode value :utf-8)))))))
 
 (defun redirect (url)
   (setf (status-of *request*) 302)
