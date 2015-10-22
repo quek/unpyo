@@ -63,7 +63,7 @@
   (if (position #\@ route-path)
       (let* ((parts (split-sequence:split-sequence #\/ route-path :remove-empty-subseqs t))
              binds
-             (regex (format nil "~{~a~^/~}"
+             (regex (format nil "\\A/~{~a~^/~}"
                             (loop for part in parts
                                   if (char= #\@ (char part 0))
                                     collect (progn
