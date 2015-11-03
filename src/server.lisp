@@ -216,15 +216,15 @@
                      (when (stringp status)
                        (setf status (parse-integer status)))
                      (when (= status -1)
-                       (unless (and (null headers) (null res-body))
+                       (unless (and (null headers) (zerop (length res-body)))
                          (error "async response must have empty headers and body"))
                        (return-from handle-request :async)))
                  (error (e)
                    (unknow-error events self e "app")
                    (setf (values status headers res-body) (lowlevel-error self e))))
 
-               (when (and (car res-body) (null (cdr res-body)))
-                 (setf content-length (bytesize (car res-body))))
+               (when (= 1 (length res-body))
+                 (setf content-length (bytesize (aref res-body 0))))
                (if (equal "HTTP/1.1" (gethash "HTTP_VERSION" env))
                    (progn                ;HTTP/1.1
                      (setf allow-chunked t)
@@ -295,7 +295,7 @@
                  (return-from handle-request :async))
 
 
-               (loop for part in res-body
+               (loop for part across res-body
                      do (typecase part
                           (string
                            (with-buffer (buf :static t)
@@ -320,10 +320,10 @@
       keep-alive)))
 
 (defmethod lowlevel-error ((self server) error)
-  (values 500 nil (list
-                   (format nil "~a~%" error)
-                   (with-output-to-string (out)
-                     (trivial-backtrace:print-backtrace error :output out :verbose t)))))
+  (values 500 nil
+          (vector (format nil "~a~%" error)
+                  (with-output-to-string (out)
+                    (trivial-backtrace:print-backtrace error :output out :verbose t)))))
 
 (defmethod graceful-shutdown ((self server))
   (with-slots (thread-pool) self
