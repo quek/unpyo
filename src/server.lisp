@@ -138,7 +138,7 @@
       (handler-case
           (when close-socket
             (close client))
-        ((or io-error sytem-call-error) ()
+        (iolib.syscalls:syscall-error ()
           ;; Already closed
           )
         (error (e)
