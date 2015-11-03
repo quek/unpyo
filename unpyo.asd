@@ -14,6 +14,7 @@
                (:file "condition")
                (:file "const")
                (:file "buffer")
+               (:file "writev")
                (:file "client")
                (:file "thread-pool")
                (:file "events")
