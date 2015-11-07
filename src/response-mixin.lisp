@@ -22,11 +22,11 @@
   (with-slots (body) response-mixin
     (or end (setf end (length string)))
     (when (plusp (- end start))
-      (vector-push-extend (subseq string start end) body))))
+      (vector-push-extend (string-to-octets (subseq string start end)) body))))
 
 (defmethod trivial-gray-streams:stream-write-char ((response-mixin response-mixin) character)
   (with-slots (body) response-mixin
-    (vector-push-extend (string character) body)))
+    (vector-push-extend (string-to-octets (string character)) body)))
 
 (defmethod body-of ((response-mixin response-mixin))
   (with-slots (body) response-mixin

@@ -198,19 +198,21 @@
       (setf (gethash +unpyo-input+ env) body)
       (setf (gethash +unpyo-url-scheme+ env) (if (gethash "HTTPS" env) "https" "http"))
       (setf (gethash +unpyo-after-reply+ env) after-reply)
-      (let ((*request* (make-request app env)))
+      (let* ((*request* (make-request app env))
+             (response-buffer (body-of *request*)))
         (unwind-protect
              (with-cork (client-socket)
                (handler-case
                    (progn
                      (with-debugger
-                       (let ((info.read-eval-print.html:*html-output* *request*)
-                             (info.read-eval-print.css:*css-output* *request*))
-                         (call app)))
+                       (let ((info.read-eval-print.css:*css-output* *request*))
+                         (info.read-eval-print.html:with-html-buffer (response-buffer)
+                           (info.read-eval-print.css:with-css-buffer (response-buffer)
+                             (call app)))))
                      (setf (values status headers res-body)
                            (values (status-of *request*)
                                    (response-headers-of *request*)
-                                   (body-of *request*)))
+                                   response-buffer))
                      (when (hijacked-p client)
                        (return-from handle-request :async))
                      (when (stringp status)
@@ -226,7 +228,7 @@
                (when (= 1 (length res-body))
                  (setf content-length (bytesize (aref res-body 0))))
                (if (equal "HTTP/1.1" (gethash "HTTP_VERSION" env))
-                   (progn                ;HTTP/1.1
+                   (progn               ;HTTP/1.1
                      (setf allow-chunked t)
                      (setf keep-alive (not (equal (gethash "HTTP_CONNECTION" env) "close")))
                      (setf include-keepalive-header nil)
@@ -240,7 +242,7 @@
                                              (< status 200)
                                              (gethash status *status-with-no-entity-body*))))))
 
-                   (progn                ;HTTP/1.0
+                   (progn               ;HTTP/1.0
                      (setf allow-chunked nil)
                      (setf keep-alive (equal "Keep-Alive" (gethash "HTTP_CONNECTION" env)))
                      (setf include-keepalive-header keep-alive)
@@ -294,23 +296,15 @@
                  (funcall response-hijack client-socket)
                  (return-from handle-request :async))
 
-
-               (loop for part across res-body
-                     do (typecase part
-                          (string
-                           (with-buffer (buf :static t)
-                             (if chunked
-                                 (progn
-                                   (bwrite buf (format nil "~x" (bytesize part))
-                                           +crlf+ part +crlf+))
-                                 (bwrite buf part))
-                             (fast-write client-socket buf)))
-                          (t
-                           (fast-write client-socket part))))
-               (when chunked
-                 (with-buffer (buf :static t)
-                   (bwrite buf #.(concatenate 'string "0" +crlf+ +crlf+))
-                   (fast-write client-socket buf))))
+               (with-buffer (buf :static t)
+                 (bwrite buf (format nil "~x" (loop for i across res-body
+                                                    sum (length i)))
+                         +crlf+)
+                 (fast-write client-socket buf))
+               (vector-push-extend
+                #.(string-to-octets (concatenate 'string +crlf+ "0" +crlf+ +crlf+))
+                res-body)
+               (writev (fd-of client-socket) res-body))
           ;; cleanup forms of unwind-protect
           (close body)
           (ignore-errors (close res-body))

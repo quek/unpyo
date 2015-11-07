@@ -21,4 +21,4 @@
                 (function base-path))))
     (and (probe-file file)
          (with-open-file (in file)
-           (alexandria:copy-stream in info.read-eval-print.html:*html-output*)))))
+           (alexandria:copy-stream in *request*)))))
