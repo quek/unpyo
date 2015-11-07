@@ -27,10 +27,24 @@
                  do (cffi:with-foreign-slots ((iov-base iov-len) p (:struct iovec))
                       (setf iov-base (sb-sys:vector-sap i)
                             iov-len (length i))))
-           (loop
-             (handler-case
-                 (progn
-                   (return (iolib.syscalls:writev fd iov iovcnt)))
-               (isys:ewouldblock ()
-                 (print 'fast-write-ewouldblock)
-                 (iomux:wait-until-fd-ready fd :output 1 nil))))))))))
+           (flet ((w ()
+                    (loop
+                      (handler-case
+                          (progn
+                            (return (iolib.syscalls:writev fd iov iovcnt)))
+                        (isys:ewouldblock ()
+                          (print 'fast-write-ewouldblock)
+                          (iomux:wait-until-fd-ready fd :output 1 nil))))))
+             (loop with length fixnum = iovcnt
+                   for write-size fixnum = (w)
+                   while (plusp (decf length write-size))
+                   do (loop for p = iov then (cffi:inc-pointer p (cffi:foreign-type-size '(:struct iovec)))
+                            do (cffi:with-foreign-slots ((iov-base iov-len) p (:struct iovec))
+                                 (if (< (the fixnum iov-len) write-size)
+                                     (progn
+                                       (decf write-size (the fixnum iov-len))
+                                       (setf iov-len 0))
+                                     (progn
+                                       (cffi:inc-pointer p write-size)
+                                       (decf (the fixnum iov-len) write-size)
+                                       (loop-finish)))))))))))))
