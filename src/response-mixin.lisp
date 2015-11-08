@@ -15,18 +15,21 @@
 (defmethod trivial-gray-streams:stream-write-sequence ((response-mixin response-mixin) seq start end &key)
   (with-slots (body) response-mixin
     (when (plusp (- end start))
-      (vector-push-extend (subseq seq start end) body))))
+      (vector-push-extend (subseq seq start end) body))
+    seq))
 
 (defmethod trivial-gray-streams:stream-write-string ((response-mixin response-mixin) string
                                                      &optional (start 0) end)
   (with-slots (body) response-mixin
     (or end (setf end (length string)))
     (when (plusp (- end start))
-      (vector-push-extend (string-to-octets (subseq string start end)) body))))
+      (vector-push-extend (string-to-octets (subseq string start end)) body))
+    string))
 
 (defmethod trivial-gray-streams:stream-write-char ((response-mixin response-mixin) character)
   (with-slots (body) response-mixin
-    (vector-push-extend (string-to-octets (string character)) body)))
+    (vector-push-extend (string-to-octets (string character)) body)
+    character))
 
 (defmethod body-of ((response-mixin response-mixin))
   (with-slots (body) response-mixin
