@@ -13,7 +13,7 @@
                        :documentation "The default number of seconds to wait until we get the first data for the request")
    (reactor)
    (min-threads :initarg :min-thread :initform 1)
-   (max-threads :initarg :max-thread :initform 2)
+   (max-threads :initarg :max-thread :initform 4)
    (auto-trim-time :initform 1)
    (persistent-timeout :initform 20
                        :documentation "The number of seconds for another request within a persistent session.")
