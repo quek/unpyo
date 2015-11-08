@@ -33,6 +33,7 @@
   :depends-on (:anaphora
                :local-time
                :trivial-backtrace
+               :trivial-mimes
                :iolib
                :puri
                :percent-encoding
