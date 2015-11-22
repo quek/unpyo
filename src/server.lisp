@@ -224,8 +224,6 @@
                    (unknow-error events self e "app")
                    (setf (values status headers res-body) (lowlevel-error self e))))
 
-               (when (= 1 (length res-body))
-                 (setf content-length (bytesize (aref res-body 0))))
                (if (equal "HTTP/1.1" (gethash "HTTP_VERSION" env))
                    (progn               ;HTTP/1.1
                      (setf allow-chunked t)
