@@ -137,6 +137,8 @@ Content-Type: text/plain
                                  (sb-sys:sap+ (sb-sys:vector-sap buffer) read-length)
                                  (- buffer-size read-length)))
         do (when (zerop n)
+             ;; When a TCP connection is closed on one side read() on the other side returns 0 byte.
+             ;; https://stackoverflow.com/questions/2416944/can-read-function-on-a-connected-socket-return-zero-bytes#2416979
              (error "read zero!"))
            (incf read-length n)
            (awhen (search #.(string-to-octets (format nil "~a~a~a~a" #\cr #\lf #\cr #\lf))
