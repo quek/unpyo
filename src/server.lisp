@@ -1,5 +1,107 @@
 (in-package #:unpyo)
 
+(defstruct fragment
+  vector
+  start
+  end)
+
+(defstruct server
+  (mailbox (sb-concurrency:make-mailbox))
+  (socket (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
+            (setf (sb-bsd-sockets:sockopt-reuse-address socket) t)
+            socket))
+  (port 1958)
+  (host #(0 0 0 0))
+  (threads ()))
+
+(defstruct client
+  socket
+  (buffer (make-array 4096 :element-type '(unsigned-byte 8)))
+  method)
+
+(defun start (&key (backgroundp t))
+  (let* ((server (make-server))
+         (socket (server-socket server)))
+    (sb-bsd-sockets:socket-bind socket (server-host server) (server-port server))
+    (sb-bsd-sockets:socket-listen socket 7)
+    (loop repeat 3 do (add-thread server))
+    (if backgroundp
+        (sb-thread:make-thread 'server-loop :arguments (list server) :name "unpyo server")
+        (server-loop server))
+    server))
+
+(defun stop (server)
+  (sb-concurrency:send-message (server-mailbox server) nil)
+  (loop for i in (server-threads server) do (sb-thread:join-thread i))
+  (sb-bsd-sockets:socket-close (server-socket server)))
+
+(defun server-loop (server)
+  (loop with socket = (server-socket server)
+        with mailbox = (server-mailbox server)
+        do (sb-concurrency:send-message
+            mailbox
+            (sb-bsd-sockets:socket-accept socket))))
+
+(defun add-thread (server)
+  (push
+   (sb-thread:make-thread 'client-loop
+                          :arguments (list (server-mailbox server))
+                          :name "unpyo worker")
+   (server-threads server)))
+
+(defun client-loop (mailbox)
+  (loop with client = (make-client)
+        for socket = (sb-concurrency:receive-message mailbox)
+        while socket
+        do (handler-case (unwind-protect
+                              (progn
+                                (reset-client client socket)
+                                (handle-client client))
+                           (sb-bsd-sockets:socket-close socket))
+             (error (e) (print e))))
+  (sb-concurrency:send-message mailbox nil))
+
+(defun reset-client (client socket)
+  (setf (client-socket client) socket
+        (client-method client) nil))
+
+(defun handle-client (client)
+  (let ((request-header-length (read-request-header client)))
+    (print (babel:octets-to-string (client-buffer client) :end request-header-length))
+    (let ((b (babel:string-to-octets
+              (format nil "HTTP/1.1 200 OK
+Content-Type: text/plain
+
+~a" (babel:octets-to-string (client-buffer client) :end request-header-length)))))
+      (sb-sys:with-pinned-objects (b)
+        (sb-posix:write (sb-bsd-sockets:socket-file-descriptor (client-socket client))
+                        (sb-sys:vector-sap b) (length b))))))
+
+(defun read-request-header (client)
+  (loop with buffer = (client-buffer client)
+        with buffer-size = (length buffer)
+        with fd = (sb-bsd-sockets:socket-file-descriptor (client-socket client))
+        with read-length = 0
+        for n = (sb-sys:with-pinned-objects (buffer)
+                  (sb-posix:read fd
+                                 (sb-sys:sap+ (sb-sys:vector-sap buffer) read-length)
+                                 (- buffer-size read-length)))
+        do (incf read-length n)
+           (when (search #.(string-to-octets (format nil "~a~a~a~a" #\cr #\lf #\cr #\lf))
+                         buffer :end2 read-length)
+             (return-from read-request-header read-length))
+           (when (= buffer-size read-length)
+             (error "too large request header!"))))
+
+(defun parse-request (client)
+  (let* ((buffer (client-buffer client)))
+    (let* ((s1 (position #.(char-code #\space) buffer))
+           (s2 (position #.(char-code #\space) buffer :start (1+ s1)))
+           (path (sb-ext:octets-to-string buffer :start (1+ s1) :end s2)))
+      (setf (client-method client) (if (= s1 2) :get :post))
+      (print path))))
+
+#|
 (defclass server ()
   ((app :initarg :app)
    (events :initarg :events :initform (make-stdio-events))
@@ -364,3 +466,4 @@
   (let ((server (make-instance 'server :app app)))
     (add-tcp-listener server host port)
     server))
+|#

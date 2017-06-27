@@ -15,12 +15,12 @@
                (:file "const")
                (:file "buffer")
                (:file "writev")
-               (:file "client")
-               (:file "thread-pool")
-               (:file "events")
-               (:file "reactor")
-               (:file "parser")
-               (:file "binder")
+               ;; (:file "client")
+               ;; (:file "thread-pool")
+               ;; (:file "events")
+               ;; (:file "reactor")
+               ;; (:file "parser")
+               ;; (:file "binder")
                (:file "cookie")
                (:file "session")
                (:file "response-mixin")
@@ -44,7 +44,6 @@
                :temporary-file
                :fast-io
                :flexi-streams
-               :com.informatimago.common-lisp.http
                :info.read-eval-print.html
                :info.read-eval-print.css
                :cl-base64
