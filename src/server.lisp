@@ -1,5 +1,7 @@
 (in-package #:unpyo)
 
+(defvar *server* nil)
+
 (defstruct fragment
   vector
   start
@@ -17,7 +19,8 @@
 (defstruct client
   socket
   (buffer (make-array 4096 :element-type '(unsigned-byte 8)))
-  method)
+  method
+  path)
 
 (defun start (&key (backgroundp t))
   (let* ((server (make-server))
@@ -28,9 +31,9 @@
     (if backgroundp
         (sb-thread:make-thread 'server-loop :arguments (list server) :name "unpyo server")
         (server-loop server))
-    server))
+    (setf *server* server)))
 
-(defun stop (server)
+(defun stop (&optional (server *server*))
   (sb-concurrency:send-message (server-mailbox server) nil)
   (loop for i in (server-threads server) do (sb-thread:join-thread i))
   (sb-bsd-sockets:socket-close (server-socket server)))
@@ -58,7 +61,7 @@
                                 (reset-client client socket)
                                 (handle-client client))
                            (sb-bsd-sockets:socket-close socket))
-             (error (e) (print e))))
+             (error (e) (trivial-backtrace:print-backtrace e))))
   (sb-concurrency:send-message mailbox nil))
 
 (defun reset-client (client socket)
@@ -66,13 +69,20 @@
         (client-method client) nil))
 
 (defun handle-client (client)
-  (let ((request-header-length (read-request-header client)))
-    (print (babel:octets-to-string (client-buffer client) :end request-header-length))
+  (multiple-value-bind (request-header-length read-length) (read-request-header client)
+    (parse-request-line client request-header-length)
+    (print (babel:octets-to-string (client-buffer client) :end read-length))
     (let ((b (babel:string-to-octets
               (format nil "HTTP/1.1 200 OK
 Content-Type: text/plain
 
-~a" (babel:octets-to-string (client-buffer client) :end request-header-length)))))
+~a
+~a
+-----------------------------------------------------------------------------
+~a"
+                      (client-method client)
+                      (client-path client)
+                      (babel:octets-to-string (client-buffer client) :end request-header-length)))))
       (sb-sys:with-pinned-objects (b)
         (sb-posix:write (sb-bsd-sockets:socket-file-descriptor (client-socket client))
                         (sb-sys:vector-sap b) (length b))))))
@@ -87,19 +97,37 @@ Content-Type: text/plain
                                  (sb-sys:sap+ (sb-sys:vector-sap buffer) read-length)
                                  (- buffer-size read-length)))
         do (incf read-length n)
-           (when (search #.(string-to-octets (format nil "~a~a~a~a" #\cr #\lf #\cr #\lf))
-                         buffer :end2 read-length)
-             (return-from read-request-header read-length))
+           (awhen (search #.(string-to-octets (format nil "~a~a~a~a" #\cr #\lf #\cr #\lf))
+                          buffer :end2 read-length)
+             (return-from read-request-header (values it read-length)))
            (when (= buffer-size read-length)
              (error "too large request header!"))))
 
-(defun parse-request (client)
-  (let* ((buffer (client-buffer client)))
-    (let* ((s1 (position #.(char-code #\space) buffer))
-           (s2 (position #.(char-code #\space) buffer :start (1+ s1)))
-           (path (sb-ext:octets-to-string buffer :start (1+ s1) :end s2)))
-      (setf (client-method client) (if (= s1 2) :get :post))
-      (print path))))
+(defun parse-request-line (client end)
+  (let* ((buffer (client-buffer client))
+         (s1 (position #.(char-code #\space) buffer :end end)))
+    (unless s1 (error "invalid method request!"))
+    (setf (client-method client)
+          (let ((c1 (aref buffer 0)))
+            (cond ((= c1 #.(char-code #\G))
+                   :get)
+                  ((= c1 #.(char-code #\P))
+                   (if (= (aref buffer 1) #.(char-code #\O))
+                       :post
+                       :put))
+                  ((= c1 #.(char-code #\D))
+                   :delete)
+                  ((= c1 #.(char-code #\H))
+                   :head)
+                  ((= c1 #.(char-code #\O))
+                   :options)
+                  ((= c1 #.(char-code #\T))
+                   :trace)
+                  (t (error "invalid method request!")))))
+    (let* ((s1 (1+ s1))
+           (s2 (position #.(char-code #\space) buffer :start s1 :end end)))
+      (unless s2 (error "invalid path request!"))
+      (setf (client-path client) (sb-ext:octets-to-string buffer :start s1 :end s2)))))
 
 #|
 (defclass server ()
