@@ -34,7 +34,7 @@
          (socket (server-socket server)))
     (sb-bsd-sockets:socket-bind socket (server-host server) (server-port server))
     (sb-bsd-sockets:socket-listen socket 7)
-    (loop repeat 3 do (add-thread server))
+    (loop repeat 4 do (add-thread server))
     (if backgroundp
         (sb-thread:make-thread 'server-loop :arguments (list server) :name "unpyo server")
         (server-loop server))
@@ -136,7 +136,9 @@ Content-Type: text/plain
                   (sb-posix:read fd
                                  (sb-sys:sap+ (sb-sys:vector-sap buffer) read-length)
                                  (- buffer-size read-length)))
-        do (incf read-length n)
+        do (when (zerop n)
+             (error "read zero!"))
+           (incf read-length n)
            (awhen (search #.(string-to-octets (format nil "~a~a~a~a" #\cr #\lf #\cr #\lf))
                           buffer :end2 read-length)
              (return-from read-request-header (values it read-length)))
