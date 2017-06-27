@@ -2,6 +2,7 @@
 
 (defvar *server* nil)
 (defvar *request* nil)
+(defvar *response* nil)
 
 (defstruct fragment
   vector
@@ -22,8 +23,11 @@
   socket
   (buffer (make-array 4096 :element-type '(unsigned-byte 8)))
   method
-  path
-  (response-array (make-array 256 :adjustable t :fill-pointer 0)))
+  path)
+
+(defstruct response
+  (body (make-array 256 :adjustable t :fill-pointer 0))
+  (status 200))
 
 (defun start (&key (backgroundp t))
   (let* ((server (make-server))
@@ -38,7 +42,7 @@
 
 (defun stop (&optional (server *server*))
   (sb-concurrency:send-message (server-mailbox server) nil)
-  (loop for i in (server-threads server) do (sb-thread:join-thread i))
+  (loop for i in (server-threads server) do (ignore-errors (sb-thread:join-thread i)))
   (sb-bsd-sockets:socket-close (server-socket server)))
 
 (defun server-loop (server)
@@ -58,13 +62,15 @@
 (defun request-loop (server)
   (let ((mailbox (server-mailbox server)))
     (loop with request = (make-request)
+          with response = (make-response)
           with app = (server-app server)
           for socket = (sb-concurrency:receive-message mailbox)
           while socket
           do (handler-case (unwind-protect
                                 (progn
                                   (reset-request request socket)
-                                  (handle-request request app))
+                                  (reset-response response)
+                                  (handle-request request response app))
                              (sb-bsd-sockets:socket-close socket))
                (error (e) (trivial-backtrace:print-backtrace e))))
     (sb-concurrency:send-message mailbox nil)))
@@ -72,16 +78,23 @@
 (defun reset-request (request socket)
   (setf (request-socket request) socket
         (request-method request) nil
-        (fill-pointer (request-response-array request)) 0))
+        (request-path request) nil))
 
-(defun handle-request (request app)
+(defun reset-response (response)
+  (setf (response-status response) 200
+        (fill-pointer (response-body response)) 0))
+
+(defun handle-request (request response app)
   (multiple-value-bind (request-header-length read-length) (read-request-header request)
+    (declare (ignore read-length))
     (parse-request-line request request-header-length)
+    (print (list (request-method request) (request-path request)))
     (let ((*request* request)
-          (response-buffer (request-response-array request)))
+          (*response* response)
+          (response-body (response-body response)))
       (with-debugger
-        (info.read-eval-print.html:with-html-buffer (response-buffer)
-          (info.read-eval-print.css:with-css-buffer (response-buffer)
+        (info.read-eval-print.html:with-html-buffer (response-body)
+          (info.read-eval-print.css:with-css-buffer (response-body)
             (call app))))
       (let ((b (babel:string-to-octets
                 (format nil "HTTP/1.1 200 OK
@@ -89,12 +102,12 @@ Content-Type: text/html
 Content-Length: ~d
 
 "
-                        (loop for i across response-buffer sum (length i))))))
+                        (loop for i across response-body sum (length i))))))
         (sb-sys:with-pinned-objects (b)
           (sb-posix:write (sb-bsd-sockets:socket-file-descriptor (request-socket request))
                           (sb-sys:vector-sap b) (length b))))
       (writev (sb-bsd-sockets:socket-file-descriptor (request-socket request))
-              response-buffer))
+              response-body))
 
     #+nil
     (let ((b (babel:string-to-octets
