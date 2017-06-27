@@ -1,6 +1,7 @@
 (in-package #:unpyo)
 
 (defvar *server* nil)
+(defvar *request* nil)
 
 (defstruct fragment
   vector
@@ -14,13 +15,15 @@
             socket))
   (port 1958)
   (host #(0 0 0 0))
-  (threads ()))
+  (threads ())
+  (app (make-instance 'status-app)))
 
-(defstruct client
+(defstruct request
   socket
   (buffer (make-array 4096 :element-type '(unsigned-byte 8)))
   method
-  path)
+  path
+  (response-array (make-array 256 :adjustable t :fill-pointer 0)))
 
 (defun start (&key (backgroundp t))
   (let* ((server (make-server))
@@ -47,31 +50,53 @@
 
 (defun add-thread (server)
   (push
-   (sb-thread:make-thread 'client-loop
-                          :arguments (list (server-mailbox server))
+   (sb-thread:make-thread 'request-loop
+                          :arguments (list server)
                           :name "unpyo worker")
    (server-threads server)))
 
-(defun client-loop (mailbox)
-  (loop with client = (make-client)
-        for socket = (sb-concurrency:receive-message mailbox)
-        while socket
-        do (handler-case (unwind-protect
-                              (progn
-                                (reset-client client socket)
-                                (handle-client client))
-                           (sb-bsd-sockets:socket-close socket))
-             (error (e) (trivial-backtrace:print-backtrace e))))
-  (sb-concurrency:send-message mailbox nil))
+(defun request-loop (server)
+  (let ((mailbox (server-mailbox server)))
+    (loop with request = (make-request)
+          with app = (server-app server)
+          for socket = (sb-concurrency:receive-message mailbox)
+          while socket
+          do (handler-case (unwind-protect
+                                (progn
+                                  (reset-request request socket)
+                                  (handle-request request app))
+                             (sb-bsd-sockets:socket-close socket))
+               (error (e) (trivial-backtrace:print-backtrace e))))
+    (sb-concurrency:send-message mailbox nil)))
 
-(defun reset-client (client socket)
-  (setf (client-socket client) socket
-        (client-method client) nil))
+(defun reset-request (request socket)
+  (setf (request-socket request) socket
+        (request-method request) nil
+        (fill-pointer (request-response-array request)) 0))
 
-(defun handle-client (client)
-  (multiple-value-bind (request-header-length read-length) (read-request-header client)
-    (parse-request-line client request-header-length)
-    (print (babel:octets-to-string (client-buffer client) :end read-length))
+(defun handle-request (request app)
+  (multiple-value-bind (request-header-length read-length) (read-request-header request)
+    (parse-request-line request request-header-length)
+    (let ((*request* request)
+          (response-buffer (request-response-array request)))
+      (with-debugger
+        (info.read-eval-print.html:with-html-buffer (response-buffer)
+          (info.read-eval-print.css:with-css-buffer (response-buffer)
+            (call app))))
+      (let ((b (babel:string-to-octets
+                (format nil "HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: ~d
+
+"
+                        (loop for i across response-buffer sum (length i))))))
+        (sb-sys:with-pinned-objects (b)
+          (sb-posix:write (sb-bsd-sockets:socket-file-descriptor (request-socket request))
+                          (sb-sys:vector-sap b) (length b))))
+      (writev (sb-bsd-sockets:socket-file-descriptor (request-socket request))
+              response-buffer))
+
+    #+nil
     (let ((b (babel:string-to-octets
               (format nil "HTTP/1.1 200 OK
 Content-Type: text/plain
@@ -80,17 +105,19 @@ Content-Type: text/plain
 ~a
 -----------------------------------------------------------------------------
 ~a"
-                      (client-method client)
-                      (client-path client)
-                      (babel:octets-to-string (client-buffer client) :end request-header-length)))))
+                      (request-method request)
+                      (request-path request)
+                      (babel:octets-to-string (request-buffer request) :end request-header-length)))))
+
+      
       (sb-sys:with-pinned-objects (b)
-        (sb-posix:write (sb-bsd-sockets:socket-file-descriptor (client-socket client))
+        (sb-posix:write (sb-bsd-sockets:socket-file-descriptor (request-socket request))
                         (sb-sys:vector-sap b) (length b))))))
 
-(defun read-request-header (client)
-  (loop with buffer = (client-buffer client)
+(defun read-request-header (request)
+  (loop with buffer = (request-buffer request)
         with buffer-size = (length buffer)
-        with fd = (sb-bsd-sockets:socket-file-descriptor (client-socket client))
+        with fd = (sb-bsd-sockets:socket-file-descriptor (request-socket request))
         with read-length = 0
         for n = (sb-sys:with-pinned-objects (buffer)
                   (sb-posix:read fd
@@ -103,11 +130,11 @@ Content-Type: text/plain
            (when (= buffer-size read-length)
              (error "too large request header!"))))
 
-(defun parse-request-line (client end)
-  (let* ((buffer (client-buffer client))
+(defun parse-request-line (request end)
+  (let* ((buffer (request-buffer request))
          (s1 (position #.(char-code #\space) buffer :end end)))
     (unless s1 (error "invalid method request!"))
-    (setf (client-method client)
+    (setf (request-method request)
           (let ((c1 (aref buffer 0)))
             (cond ((= c1 #.(char-code #\G))
                    :get)
@@ -127,7 +154,7 @@ Content-Type: text/plain
     (let* ((s1 (1+ s1))
            (s2 (position #.(char-code #\space) buffer :start s1 :end end)))
       (unless s2 (error "invalid path request!"))
-      (setf (client-path client) (sb-ext:octets-to-string buffer :start s1 :end s2)))))
+      (setf (request-path request) (sb-ext:octets-to-string buffer :start s1 :end s2)))))
 
 #|
 (defclass server ()
