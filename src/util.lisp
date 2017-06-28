@@ -166,6 +166,27 @@
     (ironclad:decrypt-in-place cipher msg)
     (octets-to-string msg)))
 
+(defstruct chunk
+  vector
+  start
+  length)
+
+(defun chunk (string)
+  (let ((vector (sb-ext:string-to-octets string)))
+    (make-chunk :vector vector :start 0 :length (length vector))))
+
+(defun chunk= (a b)
+  (and (= (chunk-length a) (chunk-length b))
+       (not (loop with u = (chunk-vector a)
+                  with v = (chunk-vector b)
+                  for i from (chunk-start a) below (+ (chunk-start a) (chunk-length a))
+                  for j from (chunk-start b)
+                    thereis (/= (aref u i) (aref v j))))))
+
+(defun chunk-to-string (chunk)
+  (sb-ext:octets-to-string (chunk-vector chunk)
+                           :start (chunk-start chunk)
+                           :end (+ (chunk-start chunk) (chunk-length chunk))))
 
 #+nil
 (defun dd (str &rest args)
