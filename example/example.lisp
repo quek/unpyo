@@ -15,9 +15,11 @@
 
 
 (defun dump-env ()
-  (html (:ul (maphash (lambda (k v)
-                        (html (:li (:pre k " => " v))))
-                      (env-of *request*)))))
+  (html
+    (:ul
+     (loop for (key . val) in (unpyo::request-headers *request*)
+           do (html (:li (:pre (unpyo::chunk-to-string key) " => "
+                               (unpyo::request-header-value-string  val)))))))))))
 
 (defmacro with-default-template ((&key (title "title")) &body body)
   `(html

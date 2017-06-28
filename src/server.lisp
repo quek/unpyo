@@ -24,7 +24,8 @@
   (buffer (make-array 4096 :element-type '(unsigned-byte 8)))
   method
   path
-  params)
+  params
+  (%headers +unbound+))
 
 (defstruct response
   (body (make-array 256 :adjustable t :fill-pointer 0))
@@ -81,7 +82,8 @@
   (setf (request-socket request) socket
         (request-method request) nil
         (request-path request) nil
-        (request-params request) nil))
+        (request-params request) nil
+        (request-%headers request) +unbound+))
 
 (defun reset-response (response)
   (setf (response-status response) 200
@@ -185,6 +187,37 @@ Content-Type: text/plain
     (aif (position #\? path)
          (subseq path (1+ it))
          "")))
+
+(let ((key (chunk "Content-Type")))
+  (defun request-content-type (request)
+    (awhen (cdr (assoc key (request-headers request) :test #'chunk=))
+      (request-header-value-string it))))
+
+(defun request-header-value-string (chunk)
+  (ppcre:regex-replace-all (ppcre:create-scanner "^\\s+" :multi-line-mode t) (chunk-to-string chunk) "" ))
+
+(defun request-headers (request)
+  (if (eq (request-%headers request) +unbound+)
+      (setf (request-%headers request)
+            (loop with buffer = (request-buffer request)
+                  with i = (position #.(char-code #\cr) buffer)
+                  until (search #.(sb-ext:string-to-octets (format nil "~c~c~c~c" #\cr #\lf #\cr #\lf))
+                                buffer :start2 i :end2 (+ i 4))
+                  collect (let* ((colon (position #.(char-code #\:) buffer :start (+ i 3)))
+                                 (key (make-chunk :vector buffer :start (+ i 2) :end colon))
+                                 (cr (request-header-value-end-position buffer (1+ colon)))
+                                 (val (make-chunk :vector buffer :start (1+ colon) :end cr)))
+                            (setf i cr)
+                            (cons key val))))
+      (request-%headers request)))
+
+(defun request-header-value-end-position (buffer start)
+  (let* ((cr (position #.(char-code #\cr) buffer :start start))
+         (next-line (aref buffer (+ cr 2))))
+    (if (or (= next-line #.(char-code  #\space))
+            (= next-line #.(char-code  #\tab)))
+        (request-header-value-end-position buffer (+ cr 2))
+        cr)))
 
 (defun param (&rest keys)
   (apply #'%param (request-params *request*) keys))

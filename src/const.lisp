@@ -1,5 +1,7 @@
 (in-package :unpyo)
 
+(defconstant +unbound+ '+unbound+)
+
 (alexandria:define-constant +unpyo-version+ "0.0.0" :test 'equal)
 
 (defconstant +fast-track-ka-timeout+ 0.2 "seconds")
