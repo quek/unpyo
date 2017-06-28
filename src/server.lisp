@@ -23,7 +23,8 @@
   socket
   (buffer (make-array 4096 :element-type '(unsigned-byte 8)))
   method
-  path)
+  path
+  params)
 
 (defstruct response
   (body (make-array 256 :adjustable t :fill-pointer 0))
@@ -79,7 +80,8 @@
 (defun reset-request (request socket)
   (setf (request-socket request) socket
         (request-method request) nil
-        (request-path request) nil))
+        (request-path request) nil
+        (request-params request) nil))
 
 (defun reset-response (response)
   (setf (response-status response) 200
@@ -173,6 +175,132 @@ Content-Type: text/plain
            (s2 (position #.(char-code #\space) buffer :start s1 :end end)))
       (unless s2 (error "invalid path request!"))
       (setf (request-path request) (sb-ext:octets-to-string buffer :start s1 :end s2)))))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; request
+(defun query-string (request)
+  (let ((path (request-path request)))
+    (aif (position #\? path)
+         (subseq path (1+ it))
+         "")))
+
+(defun param (&rest keys)
+  (apply #'%param (request-params *request*) keys))
+
+(defun (setf param) (value &rest keys)
+  (setf (request-params *request*)
+        (%%prepare-params (mapcar (lambda (x)
+                                    (typecase x
+                                      (string x)
+                                      (t (string-downcase x))))
+                                  keys)
+                          value
+                          (request-params *request*))))
+
+(defun %param (params &rest keys)
+  (reduce (lambda (value key)
+            (typecase key
+              (number
+               (nth key value))
+              (symbol
+               (cdr (assoc key value :test 'string-equal)))
+              (t
+               (cdr (assoc key value :test 'equal)))))
+          keys
+          :initial-value params))
+
+(defun prepare-params (request)
+  (let ((query-string (query-string request)))
+    (if (string/= query-string "")
+        (setf (request-params request) (%prepare-params query-string))
+        (setf (request-params request) nil)))
+  (when (eq (request-method request) :post)
+    #+nil
+    (cond ((alexandria:starts-with-subseq "application/x-www-form-urlencoded"
+                                          (gethash "Content-Type" env))
+           (parse-request-body request))
+          ((alexandria:starts-with-subseq "multipart/form-data"
+                                          (gethash "Content-Type" env))
+           (parse-multipart-form-data request)))))
+
+(defun %prepare-params (query-string)
+  (let (params)
+    (loop for %k=%v in (split-sequence:split-sequence #\& query-string)
+          for (%k %v) = (split-sequence:split-sequence #\= %k=%v)
+          for k = (percent-decode %k)
+          for v = (percent-decode %v)
+          when (and k v)
+            do (setf params (%%prepare-params
+                             (mapcar (lambda (x) (string-right-trim "]" x))
+                                     (split-sequence:split-sequence #\[ k))
+                             v params)))
+    params))
+
+(defun %%prepare-params (ks v params)
+  (if (endp ks)
+      v
+      (let ((key (car ks)))
+        (if (every #'digit-char-p key)
+            (progn
+              (setf key (or (parse-integer key :junk-allowed t) (length params)))
+              (let ((lack (1+ (- key (length params)))))
+                (when (plusp lack)
+                  (setf params (nconc params (make-list lack))))
+                (setf (nth key params) (%%prepare-params (cdr ks) v (nth key params)))
+                params))
+            (let ((assoc (assoc key params :test 'equal)))
+              (if (and assoc (consp (cdr assoc)))
+                  (progn (rplacd assoc (%%prepare-params (cdr ks) v (cdr assoc)))
+                         params)
+                  (acons key (%%prepare-params (cdr ks) v nil) params) ))))))
+
+(defun parse-request-body (request)
+  (with-slots (env external-format params) request
+    (let* ((content-length (parse-integer (gethash "Content-Length" env)))
+           (buffer (fast-io:make-octet-vector content-length))
+           (data (progn
+                   (read-sequence buffer (gethash "unpyo.input" env))
+                   (babel:octets-to-string buffer :encoding external-format))))
+      (setf params (append (%prepare-params data) params)))))
+
+
+(defun rfc2388::make-tmp-file-name ()
+  (temporary-file::generate-random-pathname "/tmp/unpyo/%" 'temporary-file::generate-random-string))
+
+(defun parse-multipart-form-data (request)
+  (with-slots (cleanup env external-format params) request
+    (let ((boundary (cdr (rfc2388:find-parameter
+                          "boundary"
+                          (rfc2388:header-parameters
+                           (rfc2388:parse-header (gethash "Content-Type" env) :value)))))
+          (stream (flex:make-flexi-stream
+                   (gethash +unpyo-input+ env)
+                   :external-format #.(flex:make-external-format :latin1 :eol-style :lf))))
+      (when boundary
+        (setf params
+              (append
+               (loop for part in (rfc2388:parse-mime stream boundary)
+                     for headers = (rfc2388:mime-part-headers part)
+                     for content-disposition-header = (rfc2388:find-content-disposition-header headers)
+                     for name = (cdr (rfc2388:find-parameter
+                                      "name"
+                                      (rfc2388:header-parameters content-disposition-header)))
+                     when name
+                       collect (cons name
+                                     (let ((contents (rfc2388:mime-part-contents part)))
+                                       (if (pathnamep contents)
+                                           (progn
+                                             (push (lambda () (delete-file contents)) cleanup)
+                                             (list contents
+                                                   (rfc2388:get-file-name headers)
+                                                   (rfc2388:content-type part :as-string t)))
+                                           (babel:octets-to-string
+                                            (map '(vector (unsigned-byte 8) *) #'char-code contents)
+                                            :encoding external-format)))))
+               params))))))
+
 
 #|
 (defclass server ()

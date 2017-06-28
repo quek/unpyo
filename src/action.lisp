@@ -80,7 +80,7 @@
                          for bind in binds
                          do (setf (param bind)
                                   (percent-encoding:decode
-                                   group :encoding (external-format-of *request*)
+                                   group :encoding :utf-8
                                          :www-form t)))
                    t)))))
       (lambda (url method)
@@ -112,4 +112,3 @@
 (defmethod 404-not-found ((app app-routes-mixin))
   (setf (response-status *response*) 400)
   (html "404 not found"))
-
