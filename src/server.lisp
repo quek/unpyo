@@ -16,7 +16,7 @@
             socket))
   (port 1958)
   (host #(0 0 0 0))
-  (threads ())
+  (threads ())                          ;TODO weak
   (app (make-instance 'status-app)))
 
 (defstruct request
@@ -49,7 +49,9 @@
         with mailbox = (server-mailbox server)
         do (sb-concurrency:send-message
             mailbox
-            (sb-bsd-sockets:socket-accept socket))))
+            (sb-bsd-sockets:socket-accept socket))
+           (when (< 5 (sb-concurrency:mailbox-count mailbox))
+             (add-thread server))))
 
 (defun add-thread (server)
   (push
