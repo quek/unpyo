@@ -103,6 +103,7 @@
 
 (defmethod call ((app app-routes-mixin))
   (let* ((url (request-path *request*))
+         (url (aif (position #\? url) (subseq url 0 it) url))
          (method (request-method *request*))
          (action (url-to-action url method)))
     (if action
