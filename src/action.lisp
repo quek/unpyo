@@ -102,15 +102,14 @@
   ())
 
 (defmethod call ((app app-routes-mixin))
-  (let* ((env (env-of *request*))
-         (url (gethash "REQUEST_PATH" env))
-         (method (gethash "REQUEST_METHOD" env))
+  (let* ((url (request-path *request*))
+         (method (request-method *request*))
          (action (url-to-action url method)))
     (if action
         (funcall action)
         (404-not-found app))))
 
 (defmethod 404-not-found ((app app-routes-mixin))
-  (setf (status-of *request*) 400)
+  (setf (response-status *response*) 400)
   (html "404 not found"))
 

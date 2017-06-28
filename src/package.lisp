@@ -26,7 +26,7 @@
           #:defaction
 
           #:make-server
-          #:run
+          #:start
           #:stop
 
           #:*application*

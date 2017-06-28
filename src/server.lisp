@@ -29,9 +29,8 @@
   (body (make-array 256 :adjustable t :fill-pointer 0))
   (status 200))
 
-(defun start (&key (backgroundp t))
-  (let* ((server (make-server))
-         (socket (server-socket server)))
+(defun start (server &key (backgroundp t))
+  (let* ((socket (server-socket server)))
     (sb-bsd-sockets:socket-bind socket (server-host server) (server-port server))
     (sb-bsd-sockets:socket-listen socket 7)
     (loop repeat 4 do (add-thread server))

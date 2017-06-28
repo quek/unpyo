@@ -10,7 +10,7 @@
 
 (defvar *server* (make-server :app (make-instance 'scratch-app)))
 
-(run *server*)
+(start *server*)
 ;; (stop *server*)
 
 
