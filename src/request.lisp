@@ -1,48 +1,76 @@
 (in-package :unpyo)
 
-(defvar *request* nil "a request object.")
+(defstruct request
+  socket
+  (buffer (make-array 4096 :element-type '(unsigned-byte 8)))
+  method
+  path
+  params
+  (%headers +unbound+)
+  (cleanup ()))
 
-(defclass request (response-mixin)
-  ((app :initarg :app :reader app-of)
-   (env :initarg :env :reader env-of)
-   (io :initarg :io :reader io-of)
-   (params)
-   (external-format :initform :utf-8 :accessor external-format-of)
-   (cleanup :initform nil)))
+(defun reset-request (request socket)
+  (setf (request-socket request) socket
+        (request-method request) nil
+        (request-path request) nil
+        (request-params request) nil
+        (request-%headers request) +unbound+
+        (request-cleanup request) ()))
 
-(defun make-request (app env)
-  (make-instance 'request :app app :env env))
+(defun query-string (request)
+  (let ((path (request-path request)))
+    (aif (position #\? path)
+         (subseq path (1+ it))
+         "")))
 
-(defmethod initialize-instance :after ((request request) &key)
-  (prepare-params request))
+(let ((key (chunk "Content-Type")))
+  (defun request-content-type (request)
+    (awhen (cdr (assoc key (request-headers request) :test #'chunk=))
+      (request-header-value-string it))))
 
-(defmethod cleanup ((request request))
-  (with-slots (cleanup) request
-    (dolist (x cleanup)
-      (funcall x))))
+(let ((key (chunk "Content-Length")))
+  (defun request-content-length (request)
+    (awhen (cdr (assoc key (request-headers request) :test #'chunk=))
+      (parse-integer (request-header-value-string it)))))
 
+(defun request-header-value-string (chunk)
+  (ppcre:regex-replace-all (ppcre:create-scanner "^\\s+" :multi-line-mode t) (chunk-to-string chunk) "" ))
 
-(defun env (key &optional (request *request*))
-  (and request (gethash key (env-of request))))
+(defun request-headers (request)
+  (if (eq (request-%headers request) +unbound+)
+      (setf (request-%headers request)
+            (loop with buffer = (request-buffer request)
+                  with i = (position #.(char-code #\cr) buffer)
+                  until (search #.(sb-ext:string-to-octets (format nil "~c~c~c~c" #\cr #\lf #\cr #\lf))
+                                buffer :start2 i :end2 (+ i 4))
+                  collect (let* ((colon (position #.(char-code #\:) buffer :start (+ i 3)))
+                                 (key (make-chunk :vector buffer :start (+ i 2) :end colon))
+                                 (cr (request-header-value-end-position buffer (1+ colon)))
+                                 (val (make-chunk :vector buffer :start (1+ colon) :end cr)))
+                            (setf i cr)
+                            (cons key val))))
+      (request-%headers request)))
 
-(defun (setf env) (value key &optional (request *request*))
-  (setf (gethash key (env-of request)) value))
-
+(defun request-header-value-end-position (buffer start)
+  (let* ((cr (position #.(char-code #\cr) buffer :start start))
+         (next-line (aref buffer (+ cr 2))))
+    (if (or (= next-line #.(char-code  #\space))
+            (= next-line #.(char-code  #\tab)))
+        (request-header-value-end-position buffer (+ cr 2))
+        cr)))
 
 (defun param (&rest keys)
-  (with-slots (params) *request*
-    (apply #'%param params keys)))
+  (apply #'%param (request-params *request*) keys))
 
 (defun (setf param) (value &rest keys)
-  (with-slots (params) *request*
-    (setf params
-          (%%prepare-params
-           (mapcar (lambda (x)
-                     (typecase x
-                       (string x)
-                       (t (string-downcase x))))
-                   keys)
-           value params))))
+  (setf (request-params *request*)
+        (%%prepare-params (mapcar (lambda (x)
+                                    (typecase x
+                                      (string x)
+                                      (t (string-downcase x))))
+                                  keys)
+                          value
+                          (request-params *request*))))
 
 (defun %param (params &rest keys)
   (reduce (lambda (value key)
@@ -56,26 +84,26 @@
           keys
           :initial-value params))
 
-(defmethod prepare-params ((request request))
-  (with-slots (env external-format params) request
-    (let ((query-string (gethash "QUERY_STRING" env)))
-      (if (string/= query-string "")
-          (setf params (%prepare-params query-string external-format))
-          (setf params nil)))
-    (when (string-equal (gethash "REQUEST_METHOD" env) "POST")
+(defun prepare-params (request request-header-length read-length)
+  (let ((query-string (query-string request)))
+    (if (string/= query-string "")
+        (setf (request-params request) (%prepare-params query-string))
+        (setf (request-params request) nil)))
+  (when (eq (request-method request) :post)
+    (let ((content-type (request-content-type request)))
       (cond ((alexandria:starts-with-subseq "application/x-www-form-urlencoded"
-                                            (gethash "Content-Type" env))
-             (parse-request-body request))
+                                            content-type)
+             (parse-request-body request request-header-length read-length))
             ((alexandria:starts-with-subseq "multipart/form-data"
-                                            (gethash "Content-Type" env))
-             (parse-multipart-form-data request))))))
+                                            content-type)
+             (parse-multipart-form-data request request-header-length read-length))))))
 
-(defun %prepare-params (query-string external-format)
+(defun %prepare-params (query-string)
   (let (params)
     (loop for %k=%v in (split-sequence:split-sequence #\& query-string)
           for (%k %v) = (split-sequence:split-sequence #\= %k=%v)
-          for k = (percent-decode %k external-format)
-          for v = (percent-decode %v external-format)
+          for k = (percent-decode %k)
+          for v = (percent-decode %v)
           when (and k v)
             do (setf params (%%prepare-params
                              (mapcar (lambda (x) (string-right-trim "]" x))
@@ -101,76 +129,65 @@
                          params)
                   (acons key (%%prepare-params (cdr ks) v nil) params) ))))))
 
-(defun parse-request-body (request)
-  (with-slots (env external-format params) request
-    (let* ((content-length (parse-integer (gethash "Content-Length" env)))
-           (buffer (fast-io:make-octet-vector content-length))
-           (data (progn
-                   (read-sequence buffer (gethash "unpyo.input" env))
-                   (babel:octets-to-string buffer :encoding external-format))))
-      (setf params (append (%prepare-params data external-format) params)))))
+(defun read-request-body (request request-header-length read-length)
+  (let* ((content-length (request-content-length request))
+         (header (request-buffer request))
+         (buffer (fast-io:make-octet-vector content-length)))
+    (loop for i from (+ request-header-length 4) below read-length
+          for j from 0
+          do (setf (aref buffer j) (aref header i)))
+    (sb-sys:with-pinned-objects (buffer)
+      (loop with offset = (- read-length (+ request-header-length 4))
+            for n = (sb-posix:read (sb-bsd-sockets:socket-file-descriptor (request-socket request))
+                                   (sb-sys:sap+ (sb-sys:vector-sap buffer) offset)
+                                   (- content-length offset))
+            if (zerop n)
+              do (error "closed by client in reading request body!")
+            do (incf offset n)
+               (when (= offset content-length)
+                 (loop-finish))))
+    (sb-ext:octets-to-string buffer :external-format :latin-1)))
 
+(defun parse-request-body (request request-header-length read-length)
+  (setf (request-params request)
+        (append (%prepare-params (read-request-body request request-header-length read-length))
+                (request-params request))))
 
 (defun rfc2388::make-tmp-file-name ()
   (temporary-file::generate-random-pathname "/tmp/unpyo/%" 'temporary-file::generate-random-string))
 
-(defun parse-multipart-form-data (request)
-  (with-slots (cleanup env external-format params) request
-    (let ((boundary (cdr (rfc2388:find-parameter
-                          "boundary"
-                          (rfc2388:header-parameters
-                           (rfc2388:parse-header (gethash "Content-Type" env) :value)))))
-          (stream (flex:make-flexi-stream
-                   (gethash +unpyo-input+ env)
-                   :external-format #.(flex:make-external-format :latin1 :eol-style :lf))))
-      (when boundary
-        (setf params
-              (append
-               (loop for part in (rfc2388:parse-mime stream boundary)
-                     for headers = (rfc2388:mime-part-headers part)
-                     for content-disposition-header = (rfc2388:find-content-disposition-header headers)
-                     for name = (cdr (rfc2388:find-parameter
-                                      "name"
-                                      (rfc2388:header-parameters content-disposition-header)))
-                     when name
-                       collect (cons name
-                                     (let ((contents (rfc2388:mime-part-contents part)))
-                                       (if (pathnamep contents)
-                                           (progn
-                                             (push (lambda () (delete-file contents)) cleanup)
-                                             (list contents
-                                                   (rfc2388:get-file-name headers)
-                                                   (rfc2388:content-type part :as-string t)))
-                                           (babel:octets-to-string
-                                            (map '(vector (unsigned-byte 8) *) #'char-code contents)
-                                            :encoding external-format)))))
-               params))))))
+(defun parse-multipart-form-data (request request-header-length read-length)
+  (let ((boundary (cdr (rfc2388:find-parameter
+                        "boundary"
+                        (rfc2388:header-parameters
+                         (rfc2388:parse-header (request-content-type request) :value)))))
+        (body (read-request-body request request-header-length read-length)))
+    (when boundary
+      (setf (request-params request)
+            (append
+             (loop for part in (rfc2388:parse-mime body boundary)
+                   for headers = (rfc2388:mime-part-headers part)
+                   for content-disposition-header = (rfc2388:find-content-disposition-header headers)
+                   for name = (cdr (rfc2388:find-parameter
+                                    "name"
+                                    (rfc2388:header-parameters content-disposition-header)))
+                   when name
+                     collect (cons name
+                                   (let ((contents (rfc2388:mime-part-contents part)))
+                                     (if (pathnamep contents)
+                                         (progn
+                                           (push (lambda () (delete-file contents))
+                                                 (request-cleanup request))
+                                           (list contents
+                                                 (rfc2388:get-file-name headers)
+                                                 (rfc2388:content-type part :as-string t)))
+                                         (sb-ext:octets-to-string
+                                          (map '(vector (unsigned-byte 8) *) #'char-code contents))))))
+             (request-params request))))))
 
-(defun status ()
-  (status-of *request*))
 
-(defun (setf status) (value)
-  (setf (status-of *request*) value))
 
-(defun header (key)
-  (cdr (assoc key (response-headers-of *request*) :test #'string-equal)))
-
-(defun (setf header) (value key)
-  (with-slots (response-headers) *request*
-    (aif (assoc key response-headers :test #'string-equal)
-         (rplacd it value)
-         (setf response-headers (acons key value response-headers)))))
-
-(defun (setf cookie) (value name &key expires path domain secure http-only)
-  (setf (slot-value *request* 'set-cookies)
-        (remove-if (lambda (x)
-                     (string= name (cookie-name x)))
-                   (slot-value *request* 'set-cookies)))
-  (push
-   (make-cookie :name name :value (princ-to-string value) :expires expires :path path
-                :domain domain :secure secure :http-only http-only)
-   (slot-value *request* 'set-cookies)))
-
+#|
 (defun cookie (name)
   (and *request*
        (or
@@ -211,3 +228,4 @@
   (setf (status) 401
         (header "WWW-Authenticate")
         (format nil "Basic realm=\"~A\"" (quote-string realm))))
+|#

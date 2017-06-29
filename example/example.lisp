@@ -87,6 +87,5 @@
     (:img :src "/form/file/uploaded")))
 
 (defaction /form/file/uploaded ()
-  (break)
   (vector-push-extend (alexandria:read-file-into-byte-vector "/tmp/unpyo-scranch-upload-file")
                       (unpyo::response-body unpyo::*response*)))
