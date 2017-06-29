@@ -91,13 +91,13 @@
 
 (defun handle-request (request response app)
   (multiple-value-bind (request-header-length read-length) (read-request-header request)
-    (declare (ignore read-length))
     (parse-request-line request request-header-length)
     (print (list (request-method request) (request-path request)))
     (let ((*request* request)
           (*response* response)
           (response-body (response-body response)))
       (with-debugger
+        (prepare-params request request-header-length read-length)
         (info.read-eval-print.html:with-html-buffer (response-body)
           (info.read-eval-print.css:with-css-buffer (response-body)
             (call app))))
@@ -193,6 +193,11 @@ Content-Type: text/plain
     (awhen (cdr (assoc key (request-headers request) :test #'chunk=))
       (request-header-value-string it))))
 
+(let ((key (chunk "Content-Length")))
+  (defun request-content-length (request)
+    (awhen (cdr (assoc key (request-headers request) :test #'chunk=))
+      (parse-integer (request-header-value-string it)))))
+
 (defun request-header-value-string (chunk)
   (ppcre:regex-replace-all (ppcre:create-scanner "^\\s+" :multi-line-mode t) (chunk-to-string chunk) "" ))
 
@@ -244,19 +249,19 @@ Content-Type: text/plain
           keys
           :initial-value params))
 
-(defun prepare-params (request)
+(defun prepare-params (request request-header-length read-length)
   (let ((query-string (query-string request)))
     (if (string/= query-string "")
         (setf (request-params request) (%prepare-params query-string))
         (setf (request-params request) nil)))
   (when (eq (request-method request) :post)
-    #+nil
-    (cond ((alexandria:starts-with-subseq "application/x-www-form-urlencoded"
-                                          (gethash "Content-Type" env))
-           (parse-request-body request))
-          ((alexandria:starts-with-subseq "multipart/form-data"
-                                          (gethash "Content-Type" env))
-           (parse-multipart-form-data request)))))
+    (let ((content-type (request-content-type request)))
+      (cond ((alexandria:starts-with-subseq "application/x-www-form-urlencoded"
+                                            content-type)
+             (parse-request-body request request-header-length read-length))
+            ((alexandria:starts-with-subseq "multipart/form-data"
+                                            content-type)
+             (parse-multipart-form-data request))))))
 
 (defun %prepare-params (query-string)
   (let (params)
@@ -289,14 +294,21 @@ Content-Type: text/plain
                          params)
                   (acons key (%%prepare-params (cdr ks) v nil) params) ))))))
 
-(defun parse-request-body (request)
-  (with-slots (env external-format params) request
-    (let* ((content-length (parse-integer (gethash "Content-Length" env)))
-           (buffer (fast-io:make-octet-vector content-length))
-           (data (progn
-                   (read-sequence buffer (gethash "unpyo.input" env))
-                   (babel:octets-to-string buffer :encoding external-format))))
-      (setf params (append (%prepare-params data) params)))))
+(defun parse-request-body (request request-header-length read-length)
+  (let* ((content-length (request-content-length request))
+         (header (request-buffer request))
+         (buffer (fast-io:make-octet-vector content-length))
+         (offset (- read-length (+ request-header-length 4))))
+    (loop for i from (+ request-header-length 4) to read-length
+          for j from 0
+          do (setf (aref buffer j) (aref header i)))
+    (sb-sys:with-pinned-objects (buffer)
+      (sb-posix:read (sb-bsd-sockets:socket-file-descriptor (request-socket request))
+                     (sb-sys:sap+ (sb-sys:vector-sap buffer) offset)
+                     (- content-length offset)))
+    (let ((data (sb-ext:octets-to-string buffer)))
+      (setf (request-params request)
+            (append (%prepare-params data) (request-params request))))))
 
 
 (defun rfc2388::make-tmp-file-name ()

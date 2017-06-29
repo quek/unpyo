@@ -42,7 +42,7 @@
               do (html (:li (:a :href path path)))))))
 
 (defaction /env ()
-  (with-default-template (:title "env の内味")
+  (with-default-template (:title "env の中味")
     (:pre (with-output-to-string (*standard-output*)
             (describe *request*)))
     (dump-env)))
