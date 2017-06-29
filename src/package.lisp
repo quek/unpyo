@@ -7,8 +7,8 @@
           #:404-not-found
           #:html
           #:*request*
-          #:env
-          #:env-of
+          #:*response*
+          #:*server*
           #:app-of
           #:status
           #:param

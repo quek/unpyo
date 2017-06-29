@@ -4,11 +4,10 @@
   :serial t
   :description "Describe unpyo here"
   :author "TAHARA Yoshinori <read.eval.print@gmail.com>"
-  :license "Specify license here"
+  :license "BSD"
+  :version "0.1.0"
   :pathname "src/"
   :components ((:file "package")
-               (:file "type")
-               (:file "var")
                (:file "protocol")
                (:file "util")
                (:file "condition")
@@ -22,8 +21,7 @@
                (:file "server")
                (:file "action")
                (:file "app")
-               (:file "static-app")
-               (:file "form"))
+               (:file "static-app"))
   :depends-on (:anaphora
                :local-time
                :trivial-backtrace

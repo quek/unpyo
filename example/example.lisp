@@ -8,9 +8,7 @@
 (defclass scratch-app (application)
   ())
 
-(defvar *server* (make-server :app (make-instance 'scratch-app)))
-
-(start *server*)
+(start (make-server :app (make-instance 'scratch-app)))
 ;; (stop *server*)
 
 
