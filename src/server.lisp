@@ -25,7 +25,8 @@
   method
   path
   params
-  (%headers +unbound+))
+  (%headers +unbound+)
+  (cleanup ()))
 
 (defstruct response
   (body (make-array 256 :adjustable t :fill-pointer 0))
@@ -73,7 +74,9 @@
                                 (progn
                                   (reset-request request socket)
                                   (reset-response response)
-                                  (handle-request request response app))
+                                  (handle-request request response app)
+                                  (loop for f in (request-cleanup request)
+                                        do (funcall f)))
                              (sb-bsd-sockets:socket-close socket))
                (error (e) (trivial-backtrace:print-backtrace e))))
     (sb-concurrency:send-message mailbox nil)))
@@ -83,7 +86,8 @@
         (request-method request) nil
         (request-path request) nil
         (request-params request) nil
-        (request-%headers request) +unbound+))
+        (request-%headers request) +unbound+
+        (request-cleanup request) ()))
 
 (defun reset-response (response)
   (setf (response-status response) 200
@@ -261,7 +265,7 @@ Content-Type: text/plain
              (parse-request-body request request-header-length read-length))
             ((alexandria:starts-with-subseq "multipart/form-data"
                                             content-type)
-             (parse-multipart-form-data request))))))
+             (parse-multipart-form-data request request-header-length read-length))))))
 
 (defun %prepare-params (query-string)
   (let (params)
@@ -294,57 +298,61 @@ Content-Type: text/plain
                          params)
                   (acons key (%%prepare-params (cdr ks) v nil) params) ))))))
 
-(defun parse-request-body (request request-header-length read-length)
+(defun read-request-body (request request-header-length read-length)
   (let* ((content-length (request-content-length request))
          (header (request-buffer request))
-         (buffer (fast-io:make-octet-vector content-length))
-         (offset (- read-length (+ request-header-length 4))))
-    (loop for i from (+ request-header-length 4) to read-length
+         (buffer (fast-io:make-octet-vector content-length)))
+    (loop for i from (+ request-header-length 4) below read-length
           for j from 0
           do (setf (aref buffer j) (aref header i)))
     (sb-sys:with-pinned-objects (buffer)
-      (sb-posix:read (sb-bsd-sockets:socket-file-descriptor (request-socket request))
-                     (sb-sys:sap+ (sb-sys:vector-sap buffer) offset)
-                     (- content-length offset)))
-    (let ((data (sb-ext:octets-to-string buffer)))
-      (setf (request-params request)
-            (append (%prepare-params data) (request-params request))))))
+      (loop with offset = (- read-length (+ request-header-length 4))
+            for n = (sb-posix:read (sb-bsd-sockets:socket-file-descriptor (request-socket request))
+                                   (sb-sys:sap+ (sb-sys:vector-sap buffer) offset)
+                                   (- content-length offset))
+            if (zerop n)
+              do (error "closed by client in reading request body!")
+            do (incf offset n)
+               (when (= offset content-length)
+                 (loop-finish))))
+    (sb-ext:octets-to-string buffer :external-format :latin-1)))
 
+(defun parse-request-body (request request-header-length read-length)
+  (setf (request-params request)
+        (append (%prepare-params (read-request-body request request-header-length read-length))
+                (request-params request))))
 
 (defun rfc2388::make-tmp-file-name ()
   (temporary-file::generate-random-pathname "/tmp/unpyo/%" 'temporary-file::generate-random-string))
 
-(defun parse-multipart-form-data (request)
-  (with-slots (cleanup env external-format params) request
-    (let ((boundary (cdr (rfc2388:find-parameter
-                          "boundary"
-                          (rfc2388:header-parameters
-                           (rfc2388:parse-header (gethash "Content-Type" env) :value)))))
-          (stream (flex:make-flexi-stream
-                   (gethash +unpyo-input+ env)
-                   :external-format #.(flex:make-external-format :latin1 :eol-style :lf))))
-      (when boundary
-        (setf params
-              (append
-               (loop for part in (rfc2388:parse-mime stream boundary)
-                     for headers = (rfc2388:mime-part-headers part)
-                     for content-disposition-header = (rfc2388:find-content-disposition-header headers)
-                     for name = (cdr (rfc2388:find-parameter
-                                      "name"
-                                      (rfc2388:header-parameters content-disposition-header)))
-                     when name
-                       collect (cons name
-                                     (let ((contents (rfc2388:mime-part-contents part)))
-                                       (if (pathnamep contents)
-                                           (progn
-                                             (push (lambda () (delete-file contents)) cleanup)
-                                             (list contents
-                                                   (rfc2388:get-file-name headers)
-                                                   (rfc2388:content-type part :as-string t)))
-                                           (babel:octets-to-string
-                                            (map '(vector (unsigned-byte 8) *) #'char-code contents)
-                                            :encoding external-format)))))
-               params))))))
+(defun parse-multipart-form-data (request request-header-length read-length)
+  (let ((boundary (cdr (rfc2388:find-parameter
+                        "boundary"
+                        (rfc2388:header-parameters
+                         (rfc2388:parse-header (request-content-type request) :value)))))
+        (body (read-request-body request request-header-length read-length)))
+    (when boundary
+      (setf (request-params request)
+            (append
+             (loop for part in (rfc2388:parse-mime body boundary)
+                   for headers = (rfc2388:mime-part-headers part)
+                   for content-disposition-header = (rfc2388:find-content-disposition-header headers)
+                   for name = (cdr (rfc2388:find-parameter
+                                    "name"
+                                    (rfc2388:header-parameters content-disposition-header)))
+                   when name
+                     collect (cons name
+                                   (let ((contents (rfc2388:mime-part-contents part)))
+                                     (if (pathnamep contents)
+                                         (progn
+                                           (push (lambda () (delete-file contents))
+                                                 (request-cleanup request))
+                                           (list contents
+                                                 (rfc2388:get-file-name headers)
+                                                 (rfc2388:content-type part :as-string t)))
+                                         (sb-ext:octets-to-string
+                                          (map '(vector (unsigned-byte 8) *) #'char-code contents))))))
+             (request-params request))))))
 
 
 #|
