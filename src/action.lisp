@@ -35,7 +35,7 @@
     `(progn ,@(f body))))
 
 (defmacro defaction (name (&key
-                             method
+                             (method :get)
                              (path (string-downcase name))
                              route-function
                              (route-priority (compute-route-priority path)))
