@@ -185,8 +185,6 @@
                                           (map '(vector (unsigned-byte 8) *) #'char-code contents))))))
              (request-params request))))))
 
-
-
 #|
 (defun cookie (name)
   (and *request*
@@ -201,14 +199,6 @@
                                    :test #'string=
                                    :key #'car))))
             (and value (percent-decode value :utf-8)))))))
-
-(defun redirect (url)
-  (setf (status-of *request*) 302)
-  (setf (header "Location") url))
-
-(defun redirect-permanently (url)
-  (setf (status-of *request*) 301)
-  (setf (header "Location") url))
 
 (defun request-uri ()
   (env "REQUEST_URI"))

@@ -32,3 +32,20 @@ Content-Type: ~a
 ;;   a: b
 ;;   
 ;;   "
+
+(defun response-header (response name)
+  (aif (find name (response-headers response) :test #'equal)
+       (cadr it)))
+
+(defun (setf response-header) (value response name)
+  (aif (find name (response-headers response) :test #'equal)
+       (setf (cadr it) value)
+       (push (list name value) (response-headers response))))
+
+(defun redirect (url)
+  (setf (response-status *response*) 302)
+  (setf (response-header *response* "Location") url))
+
+(defun redirect-permanently (url)
+  (setf (response-status *response*) 301)
+  (setf (response-header *response* "Location") url))
