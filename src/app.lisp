@@ -20,7 +20,10 @@
         (:title "env"))
       (:body
           (:p (local-time:now))
-        (:ul
+          (:ul
+           (:li (request-method *request*))
+           (:li (request-path *request*))))
+           #+nil
             (maphash (lambda (k v)
                        (html (:li k " " v)))
-                     (env-of *request*)))))))
+                     (env-of *request*)))))

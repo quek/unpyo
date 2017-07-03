@@ -8,16 +8,16 @@
 (defclass scratch-app (application)
   ())
 
-(defvar *server* (make-server :app (make-instance 'scratch-app)))
-
-(run *server*)
+(start (make-server :app (make-instance 'scratch-app)))
 ;; (stop *server*)
 
 
 (defun dump-env ()
-  (html (:ul (maphash (lambda (k v)
-                        (html (:li (:pre k " => " v))))
-                      (env-of *request*)))))
+  (html
+    (:ul
+     (loop for (key . val) in (unpyo::request-headers *request*)
+           do (html (:li (:pre (unpyo::chunk-to-string key) " => "
+                               (unpyo::request-header-value-string  val))))))))
 
 (defmacro with-default-template ((&key (title "title")) &body body)
   `(html
@@ -40,7 +40,7 @@
               do (html (:li (:a :href path path)))))))
 
 (defaction /env ()
-  (with-default-template (:title "env の内味")
+  (with-default-template (:title "env の中味")
     (:pre (with-output-to-string (*standard-output*)
             (describe *request*)))
     (dump-env)))
@@ -81,13 +81,9 @@
   (with-default-template (:title "画像のアップロード先")
     (:p "[" @a "]")
     (:pre @file)
-    (:pre (format nil "~s" (slot-value *request* 'unpyo::params)))
-    (:img :src "/form/file/uploaded")
-    (:ul
-        (maphash (lambda (key value)
-                   (html (:li (format nil "~a = ~a" key value))))
-                 (slot-value *request* 'env)))))
+    (:pre (format nil "~s" (unpyo::request-params *request*)))
+    (:img :src "/form/file/uploaded")))
 
 (defaction /form/file/uploaded ()
-  (write-sequence (alexandria:read-file-into-byte-vector "/tmp/unpyo-scranch-upload-file")
-                  *request*))
+  (vector-push-extend (alexandria:read-file-into-byte-vector "/tmp/unpyo-scranch-upload-file")
+                      (unpyo::response-body unpyo::*response*)))

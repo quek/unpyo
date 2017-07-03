@@ -35,7 +35,7 @@
     `(progn ,@(f body))))
 
 (defmacro defaction (name (&key
-                             method
+                             (method :get)
                              (path (string-downcase name))
                              route-function
                              (route-priority (compute-route-priority path)))
@@ -80,7 +80,7 @@
                          for bind in binds
                          do (setf (param bind)
                                   (percent-encoding:decode
-                                   group :encoding (external-format-of *request*)
+                                   group :encoding :utf-8
                                          :www-form t)))
                    t)))))
       (lambda (url method)
@@ -102,15 +102,14 @@
   ())
 
 (defmethod call ((app app-routes-mixin))
-  (let* ((env (env-of *request*))
-         (url (gethash "REQUEST_PATH" env))
-         (method (gethash "REQUEST_METHOD" env))
+  (let* ((url (request-path *request*))
+         (url (aif (position #\? url) (subseq url 0 it) url))
+         (method (request-method *request*))
          (action (url-to-action url method)))
     (if action
         (funcall action)
         (404-not-found app))))
 
 (defmethod 404-not-found ((app app-routes-mixin))
-  (setf (status-of *request*) 400)
+  (setf (response-status *response*) 400)
   (html "404 not found"))
-

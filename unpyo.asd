@@ -4,32 +4,24 @@
   :serial t
   :description "Describe unpyo here"
   :author "TAHARA Yoshinori <read.eval.print@gmail.com>"
-  :license "Specify license here"
+  :license "BSD"
+  :version "0.1.0"
   :pathname "src/"
   :components ((:file "package")
-               (:file "type")
-               (:file "var")
                (:file "protocol")
                (:file "util")
                (:file "condition")
                (:file "const")
                (:file "buffer")
                (:file "writev")
-               (:file "client")
-               (:file "thread-pool")
-               (:file "events")
-               (:file "reactor")
-               (:file "parser")
-               (:file "binder")
                (:file "cookie")
                (:file "session")
-               (:file "response-mixin")
                (:file "request")
+               (:file "response")
                (:file "server")
                (:file "action")
                (:file "app")
-               (:file "static-app")
-               (:file "form"))
+               (:file "static-app"))
   :depends-on (:anaphora
                :local-time
                :trivial-backtrace
@@ -44,7 +36,6 @@
                :temporary-file
                :fast-io
                :flexi-streams
-               :com.informatimago.common-lisp.http
                :info.read-eval-print.html
                :info.read-eval-print.css
                :cl-base64
