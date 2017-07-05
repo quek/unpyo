@@ -15,7 +15,7 @@
           #:header
           #:redirect
           #:redirect-permanetly
-          #:request-uri
+          #:request-path
           #:content-type
           #:authorization
           #:require-authorization
