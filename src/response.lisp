@@ -49,3 +49,43 @@ Content-Type: ~a
 (defun redirect-permanently (url)
   (setf (response-status *response*) 301)
   (setf (response-header *response* "Location") url))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; stream
+(defclass response-stream (trivial-gray-streams:fundamental-character-output-stream)
+  ((body :initarg :body)))
+
+(defun response-stream (response)
+  (make-instance 'response-stream :body (response-body response)))
+
+(defmethod trivial-gray-streams:stream-write-sequence ((stream response-stream) seq start end &key)
+  (with-slots (body) stream
+    (when (plusp (- end start))
+      (vector-push-extend (subseq seq start end) body)))
+  seq)
+
+(defmethod trivial-gray-streams:stream-write-string ((stream response-stream) string
+                                                     &optional (start 0) end)
+  (or end (setf end (length string)))
+  (with-slots (body) stream
+    (when (plusp (- end start))
+      (vector-push-extend (string-to-octets (subseq string start end)) body)))
+  string)
+
+(defmethod trivial-gray-streams:stream-write-char ((stream response-stream) character)
+  (with-slots (body) stream
+   (vector-push-extend (string-to-octets (string character)) body))
+  character)
+
+#+nil
+(let ((r (response-stream (make-response))))
+  (write-sequence "hello" r)
+  (write-sequence "world" r)
+  (write-string "foo" r)
+  (write-char #\a r)
+  (format r "~a ~s ~d" 'x "bar" 123)
+  (slot-value r 'body))
+;;⇒ #("hello" "world" #(102 111 111) #(97) #(88) #(32) #(34) #(98) #(97) #(114)
+;;     #(34) #(32) #(49) #(50) #(51))
+

@@ -23,6 +23,8 @@
           #:session
           #:rem-session
 
+          #:response-stream
+
           #:defaction
 
           #:make-server

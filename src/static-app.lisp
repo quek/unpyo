@@ -25,8 +25,8 @@
   (let ((file (etypecase uri-prefix
                 (string (merge-pathnames (subseq url (length uri-prefix)) base-path))
                 (function base-path))))
-(break)
     (when (probe-file file)
       (setf (response-content-type *response*) (mimes:mime url))
       (with-open-file (in file :element-type '(unsigned-byte 8))
-        (alexandria:copy-stream in *request* :element-type '(unsigned-byte 8))))))
+        (alexandria:copy-stream in (response-stream *response*)
+                                :element-type '(unsigned-byte 8))))))
