@@ -8,7 +8,8 @@
     (percent-encoding:decode string :encoding :utf-8 :www-form t)))
 
 (defun percent-encode (string)
-  (percent-encoding:encode string :encoding :utf-8 :www-form t))
+  (percent-encoding:encode string :encoding :utf-8 :www-form t
+))
 
 (defun split-once (delimiter sequence)
   (let ((position (position delimiter sequence)))
@@ -76,6 +77,17 @@
         (msg (ironclad:integer-to-octets ciphertext-int)))
     (ironclad:decrypt-in-place cipher msg)
     (octets-to-string msg)))
+
+
+(defun plist-to-query-string (plist)
+  (with-output-to-string (out)
+    (loop for (key value) on plist by #'cddr
+          for sep = "" then "&"
+          do (format out "~a~a=~a"
+                     sep
+                     (percent-encode (string-downcase key))
+                     (percent-encode (princ-to-string value))))))
+
 
 (defstruct chunk
   vector

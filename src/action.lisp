@@ -44,6 +44,7 @@
     `(progn
        (defun ,name-method ()
          (with-@param ,@body))
+       ,@(make-path-function-form name)
        (add-to-routes (make-route :action ',name-method
                                   :name ',name
                                   :method ,method
@@ -51,6 +52,18 @@
                                   :function ,(or route-function
                                                  `(make-route-function ,path ,method))
                                   :priority ,route-priority)))))
+
+(defun make-path-function-form (name)
+  (let* ((format (str (ppcre:regex-replace-all "@[^/]+" (string-downcase name) "~a")
+                      "~@[?~a~]"))
+         (function-name (intern (str name "-PATH")))
+         (args (loop for match in (ppcre:all-matches-as-strings "@[^/]+" (string-downcase name))
+                     collect (intern (string-upcase (subseq match 1))))))
+    (let ((query-parameters (gensym)))
+     `((defun ,function-name (,@args &rest ,query-parameters)
+         (format nil ,format
+                 ,@(mapcar (lambda (x) `(percent-encode (princ-to-string ,x))) args)
+                 (and ,query-parameters (plist-to-query-string ,query-parameters))))))))
 
 (defun add-to-routes (route)
   (setf *routes* (delete route *routes* :test #'route=))
