@@ -26,6 +26,7 @@
           #:response-stream
 
           #:defaction
+          #:call-next-action
 
           #:make-server
           #:start

@@ -93,22 +93,21 @@
       (- 100 (* (count #\/ path) 10))
       most-negative-fixnum))
 
-(defun url-to-action (url method)
-  (loop for route in *routes*
-        if (funcall (route-function route) url method)
-          do (return-from url-to-action (route-action route))))
+(define-condition not-handlable-request (error) ())
 
-(defclass app-routes-mixin ()
-  ())
+(defun call-next-action ()
+  (error 'not-handlable-request))
 
 (defmethod call ((app app-routes-mixin))
   (let* ((url (request-path *request*))
          (url (aif (position #\? url) (subseq url 0 it) url))
-         (method (request-method *request*))
-         (action (url-to-action url method)))
-    (if action
-        (funcall action)
-        (404-not-found app))))
+         (method (request-method *request*)))
+      (loop for route in *routes*
+        if (funcall (route-function route) url method)
+          do (handler-case
+                 (return-from call (funcall (route-action route)))
+               (not-handlable-request ())))
+    (404-not-found app)))
 
 (defmethod 404-not-found ((app app-routes-mixin))
   (setf (response-status *response*) 400)
