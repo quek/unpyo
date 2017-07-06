@@ -48,7 +48,7 @@
 (defaction /hello/@who ()
   (with-default-template (:title "URL からのパラメータ")
     (format nil "Hello ~a!" @who)
-    (:p (:a :href "/hello/あいう" "/hello/あいう"))))
+    (:p (:a :href (/hello/@who-path "あいう") "/hello/あいう"))))
 
 (defaction /room ()
   (with-default-template (:title "room")

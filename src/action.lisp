@@ -111,6 +111,9 @@
 (defun call-next-action ()
   (error 'not-handlable-request))
 
+(defclass app-routes-mixin ()
+  ())
+
 (defmethod call ((app app-routes-mixin))
   (let* ((url (request-path *request*))
          (url (aif (position #\? url) (subseq url 0 it) url))
