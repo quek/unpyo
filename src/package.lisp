@@ -2,10 +2,12 @@
 
 (defpackage :unpyo
  (:use :cl :anaphora)
- (:import-from :info.read-eval-print.html #:html)
+ (:import-from :info.read-eval-print.html #:html #:raw #:escape)
  (:export #:call
           #:404-not-found
           #:html
+          #:raw
+          #:escape
           #:*request*
           #:*response*
           #:*server*
