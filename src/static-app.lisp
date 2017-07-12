@@ -6,7 +6,7 @@
   ((static-mappings :initarg :static-mappings :initform nil)))
 
 (defmethod call ((self static-application))
-  (let ((url (request-path *request*)))
+  (let ((url (request-uri *request*)))
     (or (handle-static-file url (slot-value self 'static-mappings))
         (call-next-method))))
 
@@ -26,7 +26,7 @@
                 (string (merge-pathnames (subseq url (length uri-prefix)) base-path))
                 (function base-path))))
     (when (probe-file file)
-      (setf (response-content-type *response*) (mimes:mime url))
+      (setf (response-content-type *response*) (mimes:mime file))
       (with-open-file (in file :element-type '(unsigned-byte 8))
         (alexandria:copy-stream in (response-stream *response*)
                                 :element-type '(unsigned-byte 8))))))

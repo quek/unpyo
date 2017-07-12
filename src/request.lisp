@@ -17,6 +17,18 @@
         (request-%headers request) +unbound+
         (request-cleanup request) ()))
 
+(defun request-uri (request)
+  (let ((path (request-path request)))
+    (aif (position #\? path)
+         (subseq path 0 it)
+         path)))
+
+(defun request-query-string (request)
+  (let ((path (request-path request)))
+    (aif (position #\? path)
+         (subseq path (1+ it))
+         nil)))
+
 (defun query-string (request)
   (let ((path (request-path request)))
     (aif (position #\? path)
