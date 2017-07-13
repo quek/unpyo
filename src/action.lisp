@@ -126,5 +126,5 @@
     (404-not-found app)))
 
 (defmethod 404-not-found ((app app-routes-mixin))
-  (setf (response-status *response*) 400)
+  (setf (response-status *response*) 404)
   (html "404 not found"))
