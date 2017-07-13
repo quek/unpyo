@@ -51,6 +51,10 @@ Content-Type: ~a
   (setf (response-header *response* "Location") url))
 
 
+(defun send-json (json)
+  (vector-push-extend (string-to-octets json) (response-body *response*))
+  (setf (response-content-type *response*) "application/json"))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; stream
 (defclass response-stream (trivial-gray-streams:fundamental-character-output-stream)

@@ -26,6 +26,7 @@
           #:rem-session
 
           #:response-stream
+          #:send-json
 
           #:defaction
           #:call-next-action
