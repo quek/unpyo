@@ -18,6 +18,8 @@
           #:redirect
           #:redirect-permanetly
           #:request-path
+          #:request-stream
+          #:request-body
           #:content-type
           #:authorization
           #:require-authorization

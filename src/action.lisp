@@ -44,7 +44,7 @@
     `(progn
        (defun ,name-method ()
          (with-@param ,@body))
-       ,@(make-path-function-form name)
+       ,@(when (eq method :get) (make-path-function-form name))
        (add-to-routes (make-route :action ',name-method
                                   :name ',name
                                   :method ,method

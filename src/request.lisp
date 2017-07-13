@@ -7,6 +7,8 @@
   path
   params
   (%headers +unbound+)
+  (body-start 0)
+  (body-end 0)
   (cleanup ()))
 
 (defun reset-request (request socket)
@@ -15,7 +17,9 @@
         (request-path request) nil
         (request-params request) nil
         (request-%headers request) +unbound+
-        (request-cleanup request) ()))
+        (request-cleanup request) ()
+        (request-body-start request) 0
+        (request-body-end request) 0))
 
 (defun request-uri (request)
   (let ((path (request-path request)))
@@ -28,12 +32,6 @@
     (aif (position #\? path)
          (subseq path (1+ it))
          nil)))
-
-(defun query-string (request)
-  (let ((path (request-path request)))
-    (aif (position #\? path)
-         (subseq path (1+ it))
-         "")))
 
 (let ((key (chunk "Content-Type")))
   (defun request-content-type (request)
@@ -97,11 +95,13 @@
           :initial-value params))
 
 (defun prepare-params (request request-header-length read-length)
-  (let ((query-string (query-string request)))
-    (if (string/= query-string "")
-        (setf (request-params request) (%prepare-params query-string))
-        (setf (request-params request) nil)))
+  (setf (request-params request)
+        (aif (request-query-string request)
+             (%prepare-params it)
+             nil))
   (when (eq (request-method request) :post)
+    (setf (request-body-start request) (+ 4 request-header-length) ;4 is crlfcrlf
+          (request-body-end request) read-length)
     (let ((content-type (request-content-type request)))
       (cond ((alexandria:starts-with-subseq "application/x-www-form-urlencoded"
                                             content-type)
@@ -141,10 +141,10 @@
                          params)
                   (acons key (%%prepare-params (cdr ks) v nil) params) ))))))
 
-(defun read-request-body (request request-header-length read-length)
+(defun %read-request-body (request request-header-length read-length)
   (let ((content-length (request-content-length request)))
     (when (zerop content-length)
-      (return-from read-request-body ""))
+      (return-from %read-request-body #()))
     (let* ((header (request-buffer request))
            (buffer (fast-io:make-octet-vector content-length)))
       (loop for i from (+ request-header-length 4) below read-length
@@ -160,7 +160,12 @@
                         (loop-finish))
                        ((zerop n)
                         (error "closed by client in reading request body!")))))
-      (sb-ext:octets-to-string buffer :external-format :latin-1))))
+      buffer)))
+
+(defun read-request-body (request request-header-length read-length)
+  (sb-ext:octets-to-string
+   (%read-request-body request request-header-length read-length)
+   :external-format :latin-1))
 
 (defun parse-request-body (request request-header-length read-length)
   (setf (request-params request)
@@ -198,6 +203,46 @@
                                          (sb-ext:octets-to-string
                                           (map '(vector (unsigned-byte 8) *) #'char-code contents))))))
              (request-params request))))))
+
+(defun parse-json-from-request-body (request request-header-length read-length)
+  (let ((body (%read-request-body request request-header-length read-length)))
+    (setf (request-body request)
+          (octets-to-string body))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; stream
+(defclass request-stream (trivial-gray-streams::fundamental-binary-input-stream)
+  ((request :initarg :request)))
+
+(defun request-stream (request)
+  (make-instance 'request-stream :request request))
+
+(defmethod trivial-gray-streams:stream-read-sequence ((stream request-stream)
+                                                      sequence
+                                                      start end &key &allow-other-keys)
+  (with-slots (request) stream
+    (with-slots (body-start body-end buffer socket) request
+      (when (< body-start body-end)
+        (replace sequence buffer
+                 :start1 start :end1 end
+                 :start2 body-start :end2 body-end)
+        (let ((size (min (- end start) (- body-end body-start))))
+          (incf body-start size)
+          (incf start size)
+          (when (= start end)
+            (return-from trivial-gray-streams:stream-read-sequence start))))
+      (let ((n (sb-sys:with-pinned-objects (sequence)
+                 (sb-posix:read (sb-bsd-sockets:socket-file-descriptor socket)
+                                (sb-sys:sap+ (sb-sys:vector-sap sequence) start)
+                                (- end start)))))
+        (+ start n)))))
+
+(defun request-body (request)
+  (let* ((content-length (request-content-length request))
+         (buffer (fast-io:make-octet-vector content-length))
+         (stream (request-stream request)))
+    (read-sequence buffer stream)
+    (sb-ext:octets-to-string buffer)))
 
 #|
 (defun cookie (name)
