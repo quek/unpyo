@@ -204,11 +204,6 @@
                                           (map '(vector (unsigned-byte 8) *) #'char-code contents))))))
              (request-params request))))))
 
-(defun parse-json-from-request-body (request request-header-length read-length)
-  (let ((body (%read-request-body request request-header-length read-length)))
-    (setf (request-body request)
-          (octets-to-string body))))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; stream
 (defclass request-stream (trivial-gray-streams::fundamental-binary-input-stream)
@@ -231,11 +226,15 @@
           (incf start size)
           (when (= start end)
             (return-from trivial-gray-streams:stream-read-sequence start))))
-      (let ((n (sb-sys:with-pinned-objects (sequence)
-                 (sb-posix:read (sb-bsd-sockets:socket-file-descriptor socket)
-                                (sb-sys:sap+ (sb-sys:vector-sap sequence) start)
-                                (- end start)))))
-        (+ start n)))))
+      (loop for n = (sb-sys:with-pinned-objects (sequence)
+                      (sb-posix:read (sb-bsd-sockets:socket-file-descriptor socket)
+                                     (sb-sys:sap+ (sb-sys:vector-sap sequence) start)
+                                     (- end start)))
+            do (incf start n)
+               (when (or (= start end)
+                         (zerop n))
+                 (loop-finish)))))
+  start)
 
 (defun request-body (request)
   (let* ((content-length (request-content-length request))
