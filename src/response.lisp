@@ -4,13 +4,15 @@
   (body (make-array 256 :adjustable t :fill-pointer 0))
   (status 200)
   (content-type "text/html")
-  (headers ()))
+  (headers ())
+  (cookies ()))
 
 (defun reset-response (response)
   (setf (response-status response) 200
         (fill-pointer (response-body response)) 0
         (response-content-type response) "text/html"
-        (response-headers response) ()))
+        (response-headers response) ()
+        (response-cookies response) ()))
 
 (defun make-response-header (response)
   (format nil "HTTP/1.1 ~d ~a

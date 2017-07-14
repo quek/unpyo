@@ -35,10 +35,29 @@
   (format
    stream
    "~a=~a~:[~;~:*; Expires=~a~]~:[~;~:*; Path=~a~]~:[~;~:*; Domain=~a~]~:[~;; Secure~]~:[~;; HttpOnly~]"
-   (percent-encode (cookie-name cookie) :utf-8)
-   (percent-encode (cookie-value cookie) :utf-8)
+   (percent-encode (cookie-name cookie))
+   (percent-encode (cookie-value cookie))
    (format-cookie-date cookie)
    (cookie-path cookie)
    (cookie-domain cookie)
    (cookie-secure cookie)
    (cookie-http-only cookie)))
+
+(defun cookie (name)
+  (or
+   (loop for cookie in (slot-value *response* 'set-cookies)
+           thereis (and (string= name (cookie-name cookie))
+                        (cookie-value cookie)))
+   (awhen (request-cookie *request*)
+     (let ((value (cadr (find name (mapcar (lambda (x)
+                                             (cl-ppcre:split "=" x :limit 2))
+                                           (cl-ppcre:split ";\\s*" it))
+                              :test #'string=
+                              :key #'car))))
+       (and value (percent-decode value))))))
+
+(defun (setf cookie) (value &rest cookie-init-args)
+  (push (apply #'make-cookie :value value cookie-init-args)
+        (response-cookies *response*))
+  value)
+

@@ -1,6 +1,5 @@
 (in-package :unpyo)
 
-
 (defparameter *session-key* "_s")
 (defparameter *session-secret* "TODO この直は変えてね")
 (defparameter *session-timeout* '(30 :minute))
@@ -20,7 +19,7 @@
          (setf (cdr it) value)
          (setf session (acons key value session)))
     (setf (cookie *session-key* :expires *session-timeout* :path "/" :http-only t)
-         (encrypt (prin1-to-string session) *session-secret*))))
+          (encrypt (prin1-to-string session) *session-secret*))))
 
 (defun rem-session (key)
   (let ((session (remove-if (lambda (x)

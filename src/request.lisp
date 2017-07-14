@@ -43,6 +43,11 @@
     (awhen (cdr (assoc key (request-headers request) :test #'chunk=))
       (parse-integer (request-header-value-string it)))))
 
+(let ((key (chunk "Cookie")))
+  (defun request-cookie (request)
+    (awhen (cdr (assoc key (request-headers request) :test #'chunk=))
+      (request-header-value-string it))))
+
 (defun request-header-value-string (chunk)
   (ppcre:regex-replace-all (ppcre:create-scanner "^\\s+" :multi-line-mode t) (chunk-to-string chunk) "" ))
 
