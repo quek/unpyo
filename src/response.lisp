@@ -14,15 +14,6 @@
         (response-headers response) ()
         (response-cookies response) ()))
 
-
-
-(defmethod response-headers-of ((self response-mixin))
-  (append (slot-value self 'response-headers)
-          (mapcar (lambda (cookie)
-                    (cons "Set-Cookie" (princ-to-string cookie)))
-                  (slot-value self 'set-cookies))))
-
-
 (defun make-response-header (response)
   (format nil "HTTP/1.1 ~d ~a
 Content-Length: ~d

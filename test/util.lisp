@@ -1,6 +1,5 @@
 (in-package :unpyo.test)
 
-(defparameter *test-host* "localhost")
 (defparameter *test-port* 7775)
 
 (alexandria:define-constant +crlf+ (coerce '(#\cr #\lf) 'string) :test 'equal)
@@ -14,21 +13,17 @@
   (apply #'format stream (format nil "~a~a" format +crlf+) args))
 
 (defclass test-app (unpyo:application)
-  ((env :accessor env-of)
-   (call-back :initform #'identity :accessor call-back-of)))
+  (qq(call-back :initform #'identity :accessor call-back-of)))
 
 (unpyo:defaction /root (:path "/")
-  (let ((app (unpyo:app-of unpyo:*request*)))
-    (setf (env-of app) (unpyo:env-of unpyo:*request*))
-    (unwind-protect (funcall (call-back-of app) unpyo:*request*)
-      (setf (call-back-of app) #'identity))
-    (unpyo:html "OK")))
+  (unwind-protect (funcall (call-back-of unpyo:*application*) unpyo:*request*)
+    (setf (call-back-of unpyo:*application*) #'identity)))
 
 (defvar *app* (make-instance 'test-app))
 
 (defmacro with-test-server ((server) &body body)
-  `(let ((,server (unpyo:make-server :app *app* :port *test-port* :host *test-host*)))
-     (unpyo:run ,server)
+  `(let ((,server (unpyo:make-server :app *app* :port *test-port*)))
+     (unpyo:start ,server)
      (unwind-protect
           (progn ,@body)
        (unpyo:stop ,server))))

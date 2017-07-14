@@ -38,7 +38,7 @@
          (read-size -1))
     (setf (call-back-of *app*)
           (lambda (request)
-            (setf read-size (read-sequence buffer (unpyo:env unpyo::+unpyo-input+ request)))))
+            (setf read-size (read-sequence buffer (unpyo:request-stream request)))))
     (iolib.sockets:with-open-socket (s :remote-host *test-host* :remote-port *test-port*)
       (emit s "POST / HTTP/1.1")
       (emit s "Host:localhost")
