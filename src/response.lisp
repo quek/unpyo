@@ -14,26 +14,50 @@
         (response-headers response) ()
         (response-cookies response) ()))
 
+
+
+(defmethod response-headers-of ((self response-mixin))
+  (append (slot-value self 'response-headers)
+          (mapcar (lambda (cookie)
+                    (cons "Set-Cookie" (princ-to-string cookie)))
+                  (slot-value self 'set-cookies))))
+
+
 (defun make-response-header (response)
   (format nil "HTTP/1.1 ~d ~a
 Content-Length: ~d
 Content-Type: ~a
-~:{~a: ~a
+~{Set-Cookie: ~a
+~}~:{~a: ~a
 ~}
 "
           (response-status response)
           (gethash (response-status response) *http-status-codes*)
           (loop for i across (response-body response) sum (length i))
           (response-content-type response)
+          (mapcar #'princ-to-string (response-cookies response))
           (response-headers response)))
 
-;;(make-response-header (make-response :headers '(("a" "b"))))
+#+nil
+(make-response-header (make-response :headers '(("a" "b"))))
 ;;⇒ "HTTP/1.1 200 OK
 ;;   Content-Length: 0
 ;;   Content-Type: text/html
 ;;   a: b
 ;;   
 ;;   "
+
+#+nil
+(make-response-header (make-response :headers '(("a" "b"))
+                                     :cookies (list (make-cookie :name "a" :value "b"))))
+;;⇒ "HTTP/1.1 200 OK
+;;   Content-Length: 0
+;;   Content-Type: text/html
+;;   Set-Cookie: a=b; Path=/
+;;   a: b
+;;   
+;;   "
+
 
 (defun response-header (response name)
   (aif (find name (response-headers response) :test #'equal)
