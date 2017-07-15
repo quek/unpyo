@@ -3,6 +3,7 @@
 (defvar *server* nil)
 (defvar *request* nil)
 (defvar *response* nil)
+(defvar *application* nil)
 
 (defstruct fragment
   vector
@@ -88,6 +89,7 @@
     (print (list (request-method request) (request-path request)))
     (let ((*request* request)
           (*response* response)
+          (*application* app)
           (response-body (response-body response)))
       (with-debugger
         (prepare-params request request-header-length read-length)

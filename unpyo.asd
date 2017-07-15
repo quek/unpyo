@@ -17,12 +17,12 @@
                (:file "writev")
                (:file "request")
                (:file "response")
-               (:file "cookie")
-               (:file "session")
                (:file "server")
                (:file "action")
                (:file "app")
-               (:file "static-app"))
+               (:file "static-app")
+               (:file "cookie")
+               (:file "cookid-session"))
   :depends-on (:anaphora
                :cffi
                :local-time
