@@ -6,12 +6,13 @@
   :author "TAHARA Yoshinori <read.eval.print@gmail.com>"
   :license "BSD"
   :version "0.1.0"
-  :pathname "src/"
+  :pathname "src"
   :components ((:file "package")
                (:file "protocol")
                (:file "util")
                (:file "condition")
                (:file "const")
+               (:file "encrypt")
                (:file "buffer")
                (:file "writev")
                (:file "request")
@@ -23,6 +24,7 @@
                (:file "app")
                (:file "static-app"))
   :depends-on (:anaphora
+               :cffi
                :local-time
                :trivial-backtrace
                :trivial-mimes
@@ -38,5 +40,4 @@
                :flexi-streams
                :info.read-eval-print.html
                :info.read-eval-print.css
-               :cl-base64
-               :ironclad))
+               :cl-base64))

@@ -62,23 +62,6 @@
      ,@body))
 
 
-(defun get-cipher (key)
-  (ironclad:make-cipher
-   :blowfish :mode :ecb :key (string-to-octets key)))
-
-(defun encrypt (plaintext key)
-  (let ((cipher (get-cipher key))
-        (msg (string-to-octets plaintext)))
-    (ironclad:encrypt-in-place cipher msg)
-    (ironclad:octets-to-integer msg)))
-
-(defun decrypt (ciphertext-int key)
-  (let ((cipher (get-cipher key))
-        (msg (ironclad:integer-to-octets ciphertext-int)))
-    (ironclad:decrypt-in-place cipher msg)
-    (octets-to-string msg)))
-
-
 (defun plist-to-query-string (plist)
   (with-output-to-string (out)
     (loop for (key value) on plist by #'cddr
