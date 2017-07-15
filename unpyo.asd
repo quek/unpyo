@@ -22,7 +22,7 @@
                (:file "app")
                (:file "static-app")
                (:file "cookie")
-               (:file "cookid-session"))
+               (:file "cookie-session"))
   :depends-on (:anaphora
                :cffi
                :local-time
