@@ -45,7 +45,7 @@
 
 (defun cookie (name)
   (or
-   (loop for cookie in (slot-value *response* 'set-cookies)
+   (loop for cookie in (response-cookies *response*)
            thereis (and (string= name (cookie-name cookie))
                         (cookie-value cookie)))
    (awhen (request-cookie *request*)
@@ -56,8 +56,8 @@
                               :key #'car))))
        (and value (percent-decode value))))))
 
-(defun (setf cookie) (value &rest cookie-init-args)
-  (push (apply #'make-cookie :value value cookie-init-args)
+(defun (setf cookie) (value name &rest cookie-init-args)
+  (push (apply #'make-cookie :name name :value value cookie-init-args)
         (response-cookies *response*))
   value)
 

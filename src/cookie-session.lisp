@@ -18,9 +18,9 @@
     (call-next-method)
     (unless (eq *cookie-session-alist* :unboud)
       (setf (cookie *session-key* :expires *session-timeout* :path "/" :http-only t)
-            (encrypt (base64:string-to-base64-string
-                      (prin1-to-string *cookie-session-alist*))
-                     (slot-value self 'cookie-session-key))))))
+            (base64:usb8-array-to-base64-string
+             (encrypt (prin1-to-string *cookie-session-alist*)
+                      (slot-value self 'cookie-session-key)))))))
 
 (defun load-session-from-cookie ()
   (when (eq *cookie-session-alist* :unboud)
