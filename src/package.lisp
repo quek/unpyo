@@ -26,6 +26,7 @@
           #:cookie
           #:session
           #:rem-session
+          #:cookie-session-mixin
 
           #:response-stream
           #:send-json
