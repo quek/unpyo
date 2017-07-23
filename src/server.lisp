@@ -81,7 +81,9 @@
                                   (loop for f in (request-cleanup request)
                                         do (funcall f)))
                              (sb-bsd-sockets:socket-close socket))
-               (error (e) (trivial-backtrace:print-backtrace e))))))
+               (error (e)
+                 (log:error "error ~a"
+                            (trivial-backtrace:print-backtrace e)))))))
 
 (defun handle-request (request response app)
   (multiple-value-bind (request-header-length read-length) (read-request-header request)

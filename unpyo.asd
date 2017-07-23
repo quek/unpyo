@@ -19,6 +19,7 @@
                (:file "response")
                (:file "server")
                (:file "action")
+               (:file "logging")
                (:file "app")
                (:file "static-app")
                (:file "cookie")
@@ -38,4 +39,5 @@
                :fast-io
                :info.read-eval-print.html
                :info.read-eval-print.css
-               :cl-base64))
+               :cl-base64
+               :log4cl))

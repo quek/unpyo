@@ -9,4 +9,5 @@
                (:file "request"))
   :depends-on (:unpyo
                :fiveam
+               :iolib
                :drakma))

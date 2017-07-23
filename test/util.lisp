@@ -1,5 +1,6 @@
 (in-package :unpyo.test)
 
+(defparameter *test-host* "localhost")
 (defparameter *test-port* 7775)
 
 (alexandria:define-constant +crlf+ (coerce '(#\cr #\lf) 'string) :test 'equal)
