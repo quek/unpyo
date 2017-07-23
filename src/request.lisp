@@ -149,7 +149,7 @@
 (defun %read-request-body (request request-header-length read-length)
   (let ((content-length (request-content-length request)))
     (when (zerop content-length)
-      (return-from %read-request-body #()))
+      (return-from %read-request-body nil))
     (let* ((header (request-buffer request))
            (buffer (fast-io:make-octet-vector content-length)))
       (loop for i from (+ request-header-length 4) below read-length
@@ -168,9 +168,9 @@
       buffer)))
 
 (defun read-request-body (request request-header-length read-length)
-  (sb-ext:octets-to-string
-   (%read-request-body request request-header-length read-length)
-   :external-format :latin-1))
+  (aif (%read-request-body request request-header-length read-length)
+       (sb-ext:octets-to-string it :external-format :latin-1)
+       ""))
 
 (defun parse-request-body (request request-header-length read-length)
   (setf (request-params request)

@@ -38,13 +38,14 @@
                              (method :get)
                              (path (string-downcase name))
                              route-function
-                             (route-priority (compute-route-priority path)))
+                             (route-priority (compute-route-priority path))
+                             (def-path-p (eq method :get)))
                      &body body)
   (let ((name-method (if method (intern (str name ":" method)) name)))
     `(progn
        (defun ,name-method ()
          (with-@param ,@body))
-       ,@(when (eq method :get) (make-path-function-form name))
+       ,@(when def-path-p (make-path-function-form name))
        (add-to-routes (make-route :action ',name-method
                                   :name ',name
                                   :method ,method

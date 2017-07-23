@@ -28,7 +28,6 @@
                :local-time
                :trivial-backtrace
                :trivial-mimes
-               :iolib
                :puri
                :percent-encoding
                :rfc2388
@@ -37,7 +36,6 @@
                :sb-concurrency
                :temporary-file
                :fast-io
-               :flexi-streams
                :info.read-eval-print.html
                :info.read-eval-print.css
                :cl-base64))
