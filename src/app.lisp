@@ -1,6 +1,6 @@
 (in-package :unpyo)
 
-(defclass application (app-routes-mixin logging-mixin)
+(defclass application (app-routes-mixin)
   ())
 
 (defclass status-app ()

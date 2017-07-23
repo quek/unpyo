@@ -19,7 +19,6 @@
                (:file "response")
                (:file "server")
                (:file "action")
-               (:file "logging")
                (:file "app")
                (:file "static-app")
                (:file "cookie")

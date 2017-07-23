@@ -88,7 +88,6 @@
 (defun handle-request (request response app)
   (multiple-value-bind (request-header-length read-length) (read-request-header request)
     (parse-request-line request request-header-length)
-    (print (list (request-method request) (request-path request)))
     (let ((*request* request)
           (*response* response)
           (*application* app)
