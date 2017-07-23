@@ -3,6 +3,8 @@
 (defparameter *test-host* "localhost")
 (defparameter *test-port* 7775)
 
+(defvar *last-request*)
+
 (alexandria:define-constant +crlf+ (coerce '(#\cr #\lf) 'string) :test 'equal)
 
 (defun line (s)
@@ -13,11 +15,13 @@
 (defun emit (stream format &rest args)
   (apply #'format stream (format nil "~a~a" format +crlf+) args))
 
-(defclass test-app (unpyo:application)
-  (qq(call-back :initform #'identity :accessor call-back-of)))
+(unpyo:def-application test-app (unpyo:application)
+  ((call-back :initform #'identity :accessor call-back-of)))
 
-(unpyo:defaction /root (:path "/")
-  (unwind-protect (funcall (call-back-of unpyo:*application*) unpyo:*request*)
+(def-test-app-action /root (:path "/")
+  (setf *last-request* unpyo:*request*)
+  (unwind-protect
+       (funcall (call-back-of unpyo:*application*) unpyo:*request*)
     (setf (call-back-of unpyo:*application*) #'identity)))
 
 (defvar *app* (make-instance 'test-app))

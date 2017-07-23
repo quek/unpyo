@@ -8,8 +8,7 @@
     (format s "GET / HTTP/1.1~aHost:localhost~a~a" +crlf+ +crlf+ +crlf+)
     (force-output s)
     (is (string= "HTTP/1.1 200 OK" (line s)))
-    (let ((env (env-of *app*)))
-      (is (string= "GET" (gethash "REQUEST_METHOD" env))))))
+    (is (eq :get (unpyo:request-method *last-request*)))))
 
 (test by-dramka
   (multiple-value-bind (body status)
@@ -18,18 +17,16 @@
 
 (test post-http/1.1
   (iolib.sockets:with-open-socket (s :remote-host *test-host* :remote-port *test-port*)
+    (setf (call-back-of *app*)
+          (lambda (request)
+            (is (string= "a=b" (unpyo:request-body request)))))
     (emit s "POST / HTTP/1.1")
     (emit s "Host:localhost")
     (emit s "Content-Length:3")
     (emit s "")
     (format s "a=b")
     (force-output s)
-    (is (string= "HTTP/1.1 200 OK" (line s)))
-    (let ((env (env-of *app*)))
-      (is (string= "POST" (gethash "REQUEST_METHOD" env)))
-      (let ((buffer (fast-io:make-octet-vector 10)))
-        (is (= 3 (read-sequence buffer (gethash unpyo::+unpyo-input+ env))))
-        (is (string= "a=b" (babel:octets-to-string buffer :end 3)))))))
+    (is (string= "HTTP/1.1 200 OK" (line s)))))
 
 (test post-big-data
   (let* ((size (+ unpyo::+max-body+ unpyo::+chunk-size+))
@@ -38,7 +35,7 @@
          (read-size -1))
     (setf (call-back-of *app*)
           (lambda (request)
-            (setf read-size (read-sequence buffer (unpyo:request-stream request)))))
+            (is (= size (read-sequence buffer (unpyo:request-stream request))))))
     (iolib.sockets:with-open-socket (s :remote-host *test-host* :remote-port *test-port*)
       (emit s "POST / HTTP/1.1")
       (emit s "Host:localhost")
@@ -46,26 +43,25 @@
       (emit s "")
       (emit s data)
       (force-output s)
-      (is (string= "HTTP/1.1 200 OK" (line s)))
-      (is (= size read-size))
-      (is (equal (subseq data 0 20) (subseq (babel:octets-to-string buffer) 0 20))))))
+      (is (string= "HTTP/1.1 200 OK" (line s))))))
 
 (test head-http/1.1
+  (setf (call-back-of *app*)
+        (lambda (request)
+          (is (eq :head (unpyo:request-method request)))))
   (iolib.sockets:with-open-socket (s :remote-host *test-host* :remote-port *test-port*)
     (format s "HEAD / HTTP/1.1~aHost:localhost~a~a" +crlf+ +crlf+ +crlf+)
     (force-output s)
-    (is (string= "HTTP/1.1 200 OK" (line s)))
-    (let ((env (env-of *app*)))
-      (is (string= "HEAD" (gethash "REQUEST_METHOD" env))))))
+    (is (string= "HTTP/1.1 200 OK" (line s)))))
 
 
-(unpyo:defaction /method (:method :get)
+(def-test-app-action /method (:method :get)
   (unpyo:html "method is get"))
-(unpyo:defaction /method (:method :post)
+(def-test-app-action /method (:method :post)
   (unpyo:html "method is post"))
-(unpyo:defaction /method (:method :put)
+(def-test-app-action /method (:method :put)
   (unpyo:html "method is put"))
-(unpyo:defaction /method (:method :delete)
+(def-test-app-action /method (:method :delete)
   (unpyo:html "method is delete"))
 
 (test defaction-method
@@ -75,7 +71,7 @@
   (is (ppcre:scan "method is delete" (drakma:http-request (test-url "/method") :method :delete))))
 
 
-(unpyo:defaction /set-cookie ()
+(def-test-app-action /set-cookie ()
   (setf (unpyo:cookie "foo") "bar")
   (setf (unpyo:cookie "あ い;,う"
                       :expires (local-time:encode-timestamp 0 1 2 3 4 5 2014
@@ -98,19 +94,19 @@
         (is (eq nil (drakma:cookie-http-only-p foo))))
       (let ((x (find "あ い;,う" cookies :key #'(lambda (x)
                                                   (unpyo::percent-decode
-                                                   (drakma:cookie-name x) :utf-8))
+                                                   (drakma:cookie-name x)))
                                          :test #'string=)))
-        (is (string= "か き;,く" (unpyo::percent-decode (drakma:cookie-value x) :utf-8)))
+        (is (string= "か き;,く" (unpyo::percent-decode (drakma:cookie-value x))))
         (is (string= "/a" (drakma:cookie-path x)))
         (is (string= *test-host* (drakma:cookie-domain x)))
         (is (eq t (drakma:cookie-securep x)))
         (is (eq t (drakma:cookie-http-only-p x)))))))
 
 
-(unpyo:defaction /set-session ()
+(def-test-app-action /set-session ()
   (setf (unpyo:session "foo") '(1 2 3)))
 
-(unpyo:defaction /get-session ()
+(def-test-app-action /get-session ()
   (let ((foo (unpyo:session "foo")))
     (push 0 foo)
    (unpyo:html foo)))

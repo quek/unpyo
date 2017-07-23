@@ -20,6 +20,7 @@
           #:request-path
           #:request-stream
           #:request-body
+          #:request-method
           #:content-type
           #:authorization
           #:require-authorization
