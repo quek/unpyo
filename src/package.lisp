@@ -31,7 +31,7 @@
           #:response-stream
           #:send-json
 
-          #:defaction
+          #:def-application
           #:call-next-action
 
           #:make-server

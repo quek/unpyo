@@ -1,8 +1,6 @@
 (in-package :unpyo)
 
 
-(defvar *routes* ())
-
 (defstruct route
   action
   name
@@ -34,19 +32,21 @@
                     (cons (f (car form)) (f (cdr form)))))))
     `(progn ,@(f body))))
 
-(defmacro defaction (name (&key
-                             (method :get)
-                             (path (string-downcase name))
-                             route-function
-                             (route-priority (compute-route-priority path))
-                             (def-path-p (eq method :get)))
+(defmacro defaction (app-class name
+                     (&key
+                        (method :get)
+                        (path (string-downcase name))
+                        route-function
+                        (route-priority (compute-route-priority path))
+                        (def-path-p (eq method :get)))
                      &body body)
   (let ((name-method (if method (intern (str name ":" method)) name)))
     `(progn
        (defun ,name-method ()
          (with-@param ,@body))
        ,@(when def-path-p (make-path-function-form name))
-       (add-to-routes (make-route :action ',name-method
+       (add-to-routes ',app-class
+                      (make-route :action ',name-method
                                   :name ',name
                                   :method ,method
                                   :path ,path
@@ -66,12 +66,13 @@
                  ,@(mapcar (lambda (x) `(percent-encode (princ-to-string ,x))) args)
                  (and ,query-parameters (plist-to-query-string ,query-parameters))))))))
 
-(defun add-to-routes (route)
-  (setf *routes* (delete route *routes* :test #'route=))
-  (push route *routes*)
-  (setf *routes* (sort *routes*
+(defun add-to-routes (app-class route)
+  (with-slots (routes) (allocate-instance (find-class app-class))
+    (setf routes (delete route routes :test #'route=))
+    (push route routes)
+    (setf routes (sort routes
                        (lambda (a b)
-                         (<= (route-priority a) (route-priority b))))))
+                         (<= (route-priority a) (route-priority b)))))))
 
 (defun make-route-function (route-path route-method)
   (if (position #\@ route-path)
@@ -113,13 +114,13 @@
   (error 'not-handlable-request))
 
 (defclass app-routes-mixin ()
-  ())
+  ((routes :initform ()  :allocation :class)))
 
 (defmethod call ((app app-routes-mixin))
   (let* ((url (request-path *request*))
          (url (aif (position #\? url) (subseq url 0 it) url))
          (method (request-method *request*)))
-      (loop for route in *routes*
+      (loop for route in (slot-value app 'routes)
         if (funcall (route-function route) url method)
           do (handler-case
                  (return-from call (funcall (route-action route)))
@@ -129,3 +130,12 @@
 (defmethod 404-not-found ((app app-routes-mixin))
   (setf (response-status *response*) 404)
   (html "404 not found"))
+
+(defmacro def-application (name supers slots &optional class-options)
+  `(progn
+     (defclass ,name ,supers
+       ,slots
+       ,@(when class-options (list class-options)))
+     (defmacro ,(intern (concatenate 'string "DEF-" (symbol-name name) "-ACTION"))
+         (&rest args)
+       `(defaction ,',name ,@args))))
