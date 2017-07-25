@@ -93,7 +93,8 @@
                              (sb-bsd-sockets:socket-close socket))
                (error (e)
                  (log:error "error ~a"
-                            (trivial-backtrace:print-backtrace e)))))))
+                            (with-output-to-string (out)
+                             (trivial-backtrace:print-backtrace e :output out))))))))
 
 (defun handle-request (request response app)
   (multiple-value-bind (request-header-length read-length) (read-request-header request)
