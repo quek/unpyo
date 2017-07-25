@@ -17,7 +17,9 @@
             socket))
   (port 1958)
   (host #(0 0 0 0))
-  (threads ())                          ;TODO weak
+  (threads ())
+  server-thread
+  (stop-p nil)
   (min-threads 2)
   (max-threads 10)
   (app (make-instance 'status-app)))
@@ -28,15 +30,22 @@
     (sb-bsd-sockets:socket-listen socket 7)
     (loop repeat (server-min-threads server) do (add-thread server))
     (if backgroundp
-        (sb-thread:make-thread 'server-loop :arguments (list server) :name "unpyo server")
+        (setf (server-server-thread server)
+              (sb-thread:make-thread 'server-loop :arguments (list server) :name "unpyo server"))
         (server-loop server))
     (setf *server* server)))
 
 (defun stop (&optional (server *server*))
   (loop repeat (length (server-threads server))
         do (sb-concurrency:send-message (server-mailbox server) nil))
-  (loop for i in (server-threads server) do (ignore-errors (sb-thread:join-thread i)))
-  (sb-bsd-sockets:socket-close (server-socket server)))
+  (loop for i in (server-threads server) do (ignore-errors (sb-thread:join-thread i :timeout 5)))
+  (setf (server-stop-p server) t)
+  (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
+    (sb-bsd-sockets:socket-connect socket (server-host server) (server-port server))
+    (sb-bsd-sockets:socket-close socket))
+  (sb-bsd-sockets:socket-close (server-socket server))
+  (aif (server-server-thread server)
+       (sb-thread:join-thread it)))
 
 (defun server-loop (server)
   (loop with socket = (server-socket server)
@@ -44,6 +53,8 @@
         with nowait = 0
         do (sb-concurrency:send-message mailbox
                                         (sb-bsd-sockets:socket-accept socket))
+           (when (server-stop-p server)
+             (return-from server-loop t))
            (setf (server-threads server) (loop for thread in (server-threads server)
                                                if (sb-thread:thread-alive-p thread)
                                                  collect thread))

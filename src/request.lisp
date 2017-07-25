@@ -209,6 +209,11 @@
                                           (map '(vector (unsigned-byte 8) *) #'char-code contents))))))
              (request-params request))))))
 
+(defun request-json-body-to-params (request)
+  (aif (request-body request)
+   (setf (request-params request)
+         (json:decode-json-from-string it))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; stream
 (defclass request-stream (trivial-gray-streams::fundamental-binary-input-stream)
@@ -242,11 +247,13 @@
   start)
 
 (defun request-body (request)
-  (let* ((content-length (request-content-length request))
-         (buffer (fast-io:make-octet-vector content-length))
-         (stream (request-stream request)))
-    (read-sequence buffer stream)
-    (sb-ext:octets-to-string buffer)))
+  (let ((content-length (request-content-length request)))
+    (if content-length
+        (let* ((buffer (fast-io:make-octet-vector content-length))
+               (stream (request-stream request)))
+          (read-sequence buffer stream)
+          (sb-ext:octets-to-string buffer))
+        nil)))
 
 #|
 (defun cookie (name)

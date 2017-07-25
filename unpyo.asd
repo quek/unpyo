@@ -39,4 +39,5 @@
                :info.read-eval-print.html
                :info.read-eval-print.css
                :cl-base64
+               :cl-json
                :log4cl))
