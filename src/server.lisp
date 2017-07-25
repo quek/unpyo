@@ -40,12 +40,11 @@
         do (sb-concurrency:send-message (server-mailbox server) nil))
   (loop for i in (server-threads server) do (ignore-errors (sb-thread:join-thread i :timeout 5)))
   (setf (server-stop-p server) t)
-  (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
-    (sb-bsd-sockets:socket-connect socket (server-host server) (server-port server))
-    (sb-bsd-sockets:socket-close socket))
-  (sb-bsd-sockets:socket-close (server-socket server))
-  (aif (server-server-thread server)
-       (sb-thread:join-thread it)))
+  (ignore-errors
+   (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
+     (sb-bsd-sockets:socket-connect socket (server-host server) (server-port server))
+     (sb-bsd-sockets:socket-close socket)))
+  (sb-bsd-sockets:socket-close (server-socket server)))
 
 (defun server-loop (server)
   (loop with socket = (server-socket server)
