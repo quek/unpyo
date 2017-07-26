@@ -16,7 +16,7 @@
           #:param
           #:header
           #:redirect
-          #:redirect-permanetly
+          #:redirect-permanently
           #:request-path
           #:request-stream
           #:request-body
@@ -29,6 +29,8 @@
           #:rem-session
           #:cookie-session-mixin
 
+          #:response-status
+          #:response-header
           #:response-stream
           #:send-json
 
