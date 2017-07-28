@@ -28,6 +28,8 @@
           #:session
           #:rem-session
           #:cookie-session-mixin
+          #:*session-key*
+          #:*session-timeout*
 
           #:response-status
           #:response-header
