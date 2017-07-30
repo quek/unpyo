@@ -83,18 +83,20 @@
           with app = (server-app server)
           for socket = (sb-concurrency:receive-message mailbox)
           while socket
-          do (handler-case (unwind-protect
-                                (progn
-                                  (reset-request request socket)
-                                  (reset-response response)
-                                  (handle-request request response app)
-                                  (loop for f in (request-cleanup request)
-                                        do (funcall f)))
-                             (sb-bsd-sockets:socket-close socket))
+          do (handler-case
+                 (sb-ext:with-timeout 60
+                   (unwind-protect
+                        (progn
+                          (reset-request request socket)
+                          (reset-response response)
+                          (handle-request request response app)
+                          (loop for f in (request-cleanup request)
+                                do (funcall f)))
+                     (sb-bsd-sockets:socket-close socket)))
+               (sb-ext:timeout (e)
+                 (log:error "Timeout ~a!" e))
                (error (e)
-                 (log:error "error ~a"
-                            (with-output-to-string (out)
-                             (trivial-backtrace:print-backtrace e :output out))))))))
+                 (log:error "Error ~a!" e))))))
 
 (defun handle-request (request response app)
   (multiple-value-bind (request-header-length read-length) (read-request-header request)
