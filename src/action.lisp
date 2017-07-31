@@ -136,9 +136,11 @@
                (not-handlable-request ())))
     (404-not-found app)))
 
+(defmethod 404-not-found :before ((app app-routes-mixin))
+  (setf (response-status *response*) 404))
+
 (defmethod 404-not-found ((app app-routes-mixin))
-  (setf (response-status *response*) 404)
-  (html "404 not found"))
+  (html "404 Not Found"))
 
 (defmacro def-application (name supers slots &optional class-options)
   `(progn
