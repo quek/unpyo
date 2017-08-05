@@ -26,17 +26,18 @@
   (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
     (setf (sb-bsd-sockets:sockopt-reuse-address socket) t)
     (sb-bsd-sockets:socket-bind socket (server-host server) (server-port server))
+    (sb-bsd-sockets:socket-listen socket 7)
     (setf (server-socket server) socket)))
 
 (defun start (server &key (backgroundp t))
-  (let* ((socket (create-socket server)))
-      (sb-bsd-sockets:socket-listen socket 7)
-    (loop repeat (server-min-threads server) do (add-thread server))
-    (if backgroundp
-        (setf (server-server-thread server)
-              (sb-thread:make-thread 'server-loop :arguments (list server) :name "unpyo server"))
-        (server-loop server))
-    (setf *server* server)))
+  (setf *server* server)
+  (create-socket server)
+  (loop repeat (server-min-threads server) do (add-thread server))
+  (if backgroundp
+      (setf (server-server-thread server)
+            (sb-thread:make-thread 'server-loop :arguments (list server) :name "unpyo server"))
+      (server-loop server))
+  server)
 
 (defun stop (&optional (server *server*))
   (setf (server-stop-p server) t)
