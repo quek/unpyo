@@ -54,23 +54,22 @@
 
 (defun stop (&optional (server *server*))
   (setf (server-stop-p server) t)
-  (ignore-errors
-   (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
-     (sb-bsd-sockets:socket-connect socket (server-host server) (server-port server))
-     (sb-bsd-sockets:socket-close socket)))
-  (sb-bsd-sockets:socket-close (server-socket server))
   (loop repeat (length (server-threads server))
         do (sb-concurrency:send-message (server-mailbox server) nil))
-  (loop for i in (server-threads server) do (ignore-errors (sb-thread:join-thread i :timeout 5))))
+  (loop for i in (server-threads server) do (ignore-errors (sb-thread:join-thread i :timeout 5)))
+  (sb-bsd-sockets:socket-close (server-socket server)))
 
 (defun server-loop (server)
   (loop with socket = (server-socket server)
         with mailbox = (server-mailbox server)
         with nowait = 0
-        do (sb-concurrency:send-message mailbox
-                                        (sb-bsd-sockets:socket-accept socket))
-           (when (server-stop-p server)
-             (return-from server-loop t))
+        do (handler-case
+               (sb-ext:with-timeout 1
+                 (sb-concurrency:send-message mailbox
+                                              (sb-bsd-sockets:socket-accept socket)))
+             (sb-ext:timeout ()
+               (when (server-stop-p server)
+                 (return-from server-loop t))))
            (setf (server-threads server) (loop for thread in (server-threads server)
                                                if (sb-thread:thread-alive-p thread)
                                                  collect thread))
