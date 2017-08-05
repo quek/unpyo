@@ -12,9 +12,7 @@
 
 (defstruct server
   (mailbox (sb-concurrency:make-mailbox))
-  (socket (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
-            (setf (sb-bsd-sockets:sockopt-reuse-address socket) t)
-            socket))
+  socket
   (port 1958)
   (host #(0 0 0 0))
   (threads ())
@@ -24,10 +22,15 @@
   (max-threads 10)
   (app (make-instance 'status-app)))
 
-(defun start (server &key (backgroundp t))
-  (let* ((socket (server-socket server)))
+(defun create-socket (server)
+  (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
+    (setf (sb-bsd-sockets:sockopt-reuse-address socket) t)
     (sb-bsd-sockets:socket-bind socket (server-host server) (server-port server))
-    (sb-bsd-sockets:socket-listen socket 7)
+    (setf (server-socket server) socket)))
+
+(defun start (server &key (backgroundp t))
+  (let* ((socket (create-socket server)))
+      (sb-bsd-sockets:socket-listen socket 7)
     (loop repeat (server-min-threads server) do (add-thread server))
     (if backgroundp
         (setf (server-server-thread server)
@@ -36,15 +39,18 @@
     (setf *server* server)))
 
 (defun stop (&optional (server *server*))
-  (loop repeat (length (server-threads server))
-        do (sb-concurrency:send-message (server-mailbox server) nil))
-  (loop for i in (server-threads server) do (ignore-errors (sb-thread:join-thread i :timeout 5)))
   (setf (server-stop-p server) t)
   (ignore-errors
    (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
      (sb-bsd-sockets:socket-connect socket (server-host server) (server-port server))
      (sb-bsd-sockets:socket-close socket)))
-  (sb-bsd-sockets:socket-close (server-socket server)))
+  (sb-bsd-sockets:socket-close (server-socket server))
+  (loop repeat (length (server-threads server))
+        do (sb-concurrency:send-message (server-mailbox server) nil))
+  (sb-ext:with-timeout 60
+    (loop until (sb-concurrency:mailbox-empty-p (server-mailbox server))
+          do (sleep 0.1)))
+  (loop for i in (server-threads server) do (ignore-errors (sb-thread:join-thread i :timeout 5))))
 
 (defun server-loop (server)
   (loop with socket = (server-socket server)
