@@ -3,6 +3,9 @@
 (define-condition unpyo-error (simple-error)
   ())
 
+(define-condition read-zero-error (unpyo-error)
+  ())
+
 (define-condition connection-error (unpyo-error)
   ())
 
