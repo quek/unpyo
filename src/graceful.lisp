@@ -12,7 +12,7 @@
   (argv :pointer))
 
 (defun sighup-handler (signal code context)
-  (log:debug signal code context)
+  (log:debug signal)
   (let ((pid (sb-posix:posix-fork)))
     (log:debug pid)
     (if (zerop pid)
@@ -29,6 +29,7 @@
                                1)
               (log:debug "before execv" arg0)
               (execv path argv)
+              (log:debug "after execv... execv failed" arg0)
               (sb-ext:exit :code 255))))
         (setf *exit-function*
               (lambda ()
@@ -37,5 +38,5 @@
                     (funcall *old-sighup-handler*
                              signal code context)))))))
 
-(defun enable-gracefull-restart ()
+(defun enable-graceful-restart ()
   (setf *old-sighup-handler* (sb-c::enable-interrupt sb-vm::sighup #'sighup-handler)))

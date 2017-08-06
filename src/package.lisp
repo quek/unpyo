@@ -50,4 +50,4 @@
           #:*invoke-debugger-p*
 
           #:*exit-function*
-          #:enable-gracefull-restart))
+          #:enable-graceful-restart))

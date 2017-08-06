@@ -17,7 +17,7 @@
                (:file "writev")
                (:file "request")
                (:file "response")
-               (:file "gracefull")
+               (:file "graceful")
                (:file "server")
                (:file "action")
                (:file "app")
