@@ -74,6 +74,11 @@
                      (percent-encode (string-downcase key))
                      (percent-encode (princ-to-string value))))))
 
+(defun close-on-exec (socket)
+  (let ((fd (sb-bsd-sockets:socket-file-descriptor socket)))
+    (sb-posix:fcntl fd sb-posix:f-setfd
+                    (logior (sb-posix:fcntl fd sb-posix:f-getfd)
+                            1))))       ;FD_CLOEXEC
 
 (defstruct chunk
   vector

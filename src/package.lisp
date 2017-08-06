@@ -47,4 +47,7 @@
           #:application
           #:static-application
 
-          #:*invoke-debugger-p*))
+          #:*invoke-debugger-p*
+
+          #:*exit-function*
+          #:enable-graceful-restart))
