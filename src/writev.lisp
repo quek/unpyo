@@ -53,10 +53,15 @@
   (declare (optimize (speed 3) (safety 0) (debug 0))
            (type (simple-array * (*)) vector)
            (type fixnum fd))
-  (loop with length fixnum = (length vector)
-        for start fixnum = 0 then end
-        for end fixnum  = (min (+ start +iov-max+) length)
-        while (< start length)
-        do (%writev fd vector start end)))
-
-
+  (handler-case
+   (loop with length fixnum = (length vector)
+         for start fixnum = 0 then end
+         for end fixnum  = (min (+ start +iov-max+) length)
+         while (< start length)
+         do (%writev fd vector start end))
+    (sb-posix:syscall-error  (error)
+      (if (and (eq (sb-posix:syscall-name error) 'sb-posix::writev)
+               (= (the fixnum (sb-posix:syscall-errno error))
+                  (the fixnum sb-posix:epipe)))
+          (error 'connection-closed-by-peer)
+          (error error)))))

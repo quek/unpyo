@@ -109,7 +109,7 @@
                           (loop for f in (request-cleanup request)
                                 do (funcall f)))
                      (sb-bsd-sockets:socket-close socket)))
-               (read-zero-error ())
+               (connection-closed-by-peer ())
                (sb-ext:timeout (e)
                  (log:error "Timeout ~a!" e))
                (error (e)
@@ -146,7 +146,7 @@
         do (when (zerop n)
              ;; When a TCP connection is closed on one side read() on the other side returns 0 byte.
              ;; https://stackoverflow.com/questions/2416944/can-read-function-on-a-connected-socket-return-zero-bytes#2416979
-             (error 'read-zero-error))
+             (error 'connection-closed-by-peer))
            (incf read-length n)
            (awhen (search #.(string-to-octets (format nil "~a~a~a~a" #\cr #\lf #\cr #\lf))
                           buffer :end2 read-length)
