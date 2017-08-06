@@ -36,7 +36,7 @@
        (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
          (setf (sb-bsd-sockets:sockopt-reuse-address socket) t)
          (sb-bsd-sockets:socket-bind socket (server-host server) (server-port server))
-         (sb-bsd-sockets:socket-listen socket 7)
+         (sb-bsd-sockets:socket-listen socket 1024)
          (setf (server-socket server) socket))))
 
 (defun start (server &key (backgroundp t))
@@ -63,10 +63,12 @@
   (loop with socket = (server-socket server)
         with mailbox = (server-mailbox server)
         with nowait = 0
+        until (server-stop-p server)
         do (handler-case
-               (sb-ext:with-timeout 1
-                 (sb-concurrency:send-message mailbox
-                                              (sb-bsd-sockets:socket-accept socket)))
+               (let ((accept (sb-ext:with-timeout 1
+                               (sb-bsd-sockets:socket-accept socket))))
+                 (close-on-exec accept)
+                 (sb-concurrency:send-message mailbox accept))
              (sb-ext:timeout ()
                (when (server-stop-p server)
                  (return-from server-loop t))))

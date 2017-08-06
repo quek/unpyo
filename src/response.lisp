@@ -18,6 +18,7 @@
   (format nil "HTTP/1.1 ~d ~a
 Content-Length: ~d
 Content-Type: ~a
+Connection: close
 ~{Set-Cookie: ~a
 ~}~:{~a: ~a
 ~}
