@@ -203,11 +203,16 @@
                                            (push (lambda () (delete-file contents))
                                                  (request-cleanup request))
                                            (list contents
-                                                 (rfc2388:get-file-name headers)
+                                                 (decode-file-name (rfc2388:get-file-name headers))
                                                  (rfc2388:content-type part :as-string t)))
                                          (sb-ext:octets-to-string
                                           (map '(vector (unsigned-byte 8) *) #'char-code contents))))))
              (request-params request))))))
+
+(defun decode-file-name (file-name)
+  (sb-ext:octets-to-string
+   (sb-ext:string-to-octets file-name :external-format :latin1)
+   :external-format :utf8))
 
 (defun request-json-body-to-params (request)
   (aif (request-body request)

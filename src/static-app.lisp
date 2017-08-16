@@ -6,7 +6,7 @@
   ((static-mappings :initarg :static-mappings :initform nil)))
 
 (defmethod call ((self static-application))
-  (let ((url (request-uri *request*)))
+  (let ((url (percent:decode (request-uri *request*))))
     (or (handle-static-file url (slot-value self 'static-mappings))
         (call-next-method))))
 
