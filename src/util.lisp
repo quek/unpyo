@@ -67,12 +67,16 @@
 
 (defun plist-to-query-string (plist)
   (with-output-to-string (out)
-    (loop for (key value) on plist by #'cddr
-          for sep = "" then "&"
-          do (format out "~a~a=~a"
-                     sep
-                     (percent-encode (string-downcase key))
-                     (percent-encode (princ-to-string value))))))
+    (loop with sep = ""
+          for (key value) on plist by #'cddr
+          for name = (percent-encode (string-downcase key))
+          for values = (alexandria:ensure-list value)
+          do (loop for value in values
+                   do (format out "~a~a=~a"
+                              sep
+                              name
+                              (percent-encode (princ-to-string value)))
+                      (setf sep "&")))))
 
 (defun close-on-exec (socket)
   (let ((fd (sb-bsd-sockets:socket-file-descriptor socket)))
