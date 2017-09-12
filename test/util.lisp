@@ -15,7 +15,7 @@
 (defun emit (stream format &rest args)
   (apply #'format stream (format nil "~a~a" format +crlf+) args))
 
-(unpyo:def-application test-app (unpyo:application)
+(unpyo:def-application test-app (unpyo:application unpyo:cookie-session-mixin)
   ((call-back :initform #'identity :accessor call-back-of)))
 
 (def-test-app-action /root (:path "/")
@@ -24,7 +24,13 @@
        (funcall (call-back-of unpyo:*application*) unpyo:*request*)
     (setf (call-back-of unpyo:*application*) #'identity)))
 
-(defvar *app* (make-instance 'test-app))
+(def-test-app-action /root-post (:path "/" :method :post)
+  (setf *last-request* unpyo:*request*)
+  (unwind-protect
+       (funcall (call-back-of unpyo:*application*) unpyo:*request*)
+    (setf (call-back-of unpyo:*application*) #'identity)))
+
+(defvar *app* (make-instance 'test-app :secret-key "ねこねこ"))
 
 (defmacro with-test-server ((server) &body body)
   `(let ((,server (unpyo:make-server :app *app* :port *test-port*)))

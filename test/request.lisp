@@ -19,7 +19,8 @@
   (iolib.sockets:with-open-socket (s :remote-host *test-host* :remote-port *test-port*)
     (setf (call-back-of *app*)
           (lambda (request)
-            (is (string= "a=b" (unpyo:request-body request)))))
+            ;;スレッドが別なので（？）is だと落ちる
+            (assert (string= "a=b" (unpyo:request-body)))))
     (emit s "POST / HTTP/1.1")
     (emit s "Host:localhost")
     (emit s "Content-Length:3")
@@ -35,7 +36,7 @@
          (read-size -1))
     (setf (call-back-of *app*)
           (lambda (request)
-            (is (= size (read-sequence buffer (unpyo:request-stream request))))))
+            (assert (= size (read-sequence buffer (unpyo:request-stream request))))))
     (iolib.sockets:with-open-socket (s :remote-host *test-host* :remote-port *test-port*)
       (emit s "POST / HTTP/1.1")
       (emit s "Host:localhost")
@@ -44,16 +45,6 @@
       (emit s data)
       (force-output s)
       (is (string= "HTTP/1.1 200 OK" (line s))))))
-
-(test head-http/1.1
-  (setf (call-back-of *app*)
-        (lambda (request)
-          (is (eq :head (unpyo:request-method request)))))
-  (iolib.sockets:with-open-socket (s :remote-host *test-host* :remote-port *test-port*)
-    (format s "HEAD / HTTP/1.1~aHost:localhost~a~a" +crlf+ +crlf+ +crlf+)
-    (force-output s)
-    (is (string= "HTTP/1.1 200 OK" (line s)))))
-
 
 (def-test-app-action /method (:method :get)
   (unpyo:html "method is get"))
@@ -69,6 +60,20 @@
   (is (ppcre:scan "method is post" (drakma:http-request (test-url "/method") :method :post)))
   (is (ppcre:scan "method is put" (drakma:http-request (test-url "/method") :method :put)))
   (is (ppcre:scan "method is delete" (drakma:http-request (test-url "/method") :method :delete))))
+
+
+(def-test-app-action /post-json (:method :post)
+  (unpyo:html
+    (unpyo:raw
+     (format nil "~a ~a ~a" (unpyo:param :a) (unpyo:param :b :c) (unpyo:request-body)))))
+
+(test post-json
+  (let ((json "{\"a\": \"x\", \"b\": {\"c\": \"y\"}}"))
+    (is (string= (format nil "x y ~a" json)
+                 (drakma:http-request (test-url "/post-json")
+                                      :method :post
+                                      :content-type "application/json"
+                                      :content json)))))
 
 
 (def-test-app-action /set-cookie ()

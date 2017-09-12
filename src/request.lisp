@@ -9,6 +9,7 @@
   (%headers +unbound+)
   (body-start 0)
   (body-end 0)
+  %body
   (cleanup ()))
 
 (defun reset-request (request socket)
@@ -17,9 +18,10 @@
         (request-path request) nil
         (request-params request) nil
         (request-%headers request) +unbound+
-        (request-cleanup request) ()
         (request-body-start request) 0
-        (request-body-end request) 0))
+        (request-body-end request) 0
+        (request-%body request) nil
+        (request-cleanup request) ()))
 
 (defun request-uri (request)
   (let ((path (request-path request)))
@@ -89,13 +91,15 @@
 
 (defun %param (params &rest keys)
   (reduce (lambda (value key)
-            (typecase key
-              (number
-               (nth key value))
-              (symbol
-               (cdr (assoc key value :test 'string-equal)))
-              (t
-               (cdr (assoc key value :test 'equal)))))
+            (if (atom value)
+                value
+                (typecase key
+                  (number
+                   (nth key value))
+                  (symbol
+                   (cdr (assoc key value :test 'string-equal)))
+                  (t
+                   (cdr (assoc key value :test 'equal))))))
           keys
           :initial-value params))
 
@@ -110,10 +114,12 @@
     (let ((content-type (request-content-type request)))
       (cond ((alexandria:starts-with-subseq "application/x-www-form-urlencoded"
                                             content-type)
-             (parse-request-body request request-header-length read-length))
+             (parse-request-body request))
             ((alexandria:starts-with-subseq "multipart/form-data"
                                             content-type)
-             (parse-multipart-form-data request request-header-length read-length))))))
+             (parse-multipart-form-data request))
+            ((alexandria:starts-with-subseq "application/json" content-type)
+             (request-json-body-to-params request))))))
 
 (defun %prepare-params (query-string)
   (let (params)
@@ -146,46 +152,20 @@
                          params)
                   (acons key (%%prepare-params (cdr ks) v nil) params) ))))))
 
-(defun %read-request-body (request request-header-length read-length)
-  (let ((content-length (request-content-length request)))
-    (when (zerop content-length)
-      (return-from %read-request-body nil))
-    (let* ((header (request-buffer request))
-           (buffer (fast-io:make-octet-vector content-length)))
-      (loop for i from (+ request-header-length 4) below read-length
-            for j from 0
-            do (setf (aref buffer j) (aref header i)))
-      (sb-sys:with-pinned-objects (buffer)
-        (loop with offset = (- read-length (+ request-header-length 4))
-              for n = (sb-posix:read (sb-bsd-sockets:socket-file-descriptor (request-socket request))
-                                     (sb-sys:sap+ (sb-sys:vector-sap buffer) offset)
-                                     (- content-length offset))
-              do (incf offset n)
-                 (cond ((= offset content-length)
-                        (loop-finish))
-                       ((zerop n)
-                        (error "closed by client in reading request body!")))))
-      buffer)))
-
-(defun read-request-body (request request-header-length read-length)
-  (aif (%read-request-body request request-header-length read-length)
-       (sb-ext:octets-to-string it :external-format :latin-1)
-       ""))
-
-(defun parse-request-body (request request-header-length read-length)
+(defun parse-request-body (request)
   (setf (request-params request)
-        (append (%prepare-params (read-request-body request request-header-length read-length))
+        (append (%prepare-params (request-body request))
                 (request-params request))))
 
 (defun rfc2388::make-tmp-file-name ()
   (temporary-file::generate-random-pathname "/tmp/unpyo/%" 'temporary-file::generate-random-string))
 
-(defun parse-multipart-form-data (request request-header-length read-length)
+(defun parse-multipart-form-data (request)
   (let ((boundary (cdr (rfc2388:find-parameter
                         "boundary"
                         (rfc2388:header-parameters
                          (rfc2388:parse-header (request-content-type request) :value)))))
-        (body (read-request-body request request-header-length read-length)))
+        (body (request-body request)))
     (when boundary
       (setf (request-params request)
             (append
@@ -251,14 +231,17 @@
                  (loop-finish)))))
   start)
 
-(defun request-body (request)
-  (let ((content-length (request-content-length request)))
-    (if content-length
-        (let* ((buffer (fast-io:make-octet-vector content-length))
-               (stream (request-stream request)))
-          (read-sequence buffer stream)
-          (sb-ext:octets-to-string buffer))
-        nil)))
+(defun request-body (&optional (request *request*))
+  (sif (request-%body request)
+       it
+       (setf it
+             (let ((content-length (request-content-length request)))
+               (if content-length
+                   (let* ((buffer (fast-io:make-octet-vector content-length))
+                          (stream (request-stream request)))
+                     (read-sequence buffer stream)
+                     (sb-ext:octets-to-string buffer))
+                   "")))))
 
 #|
 (defun cookie (name)
