@@ -28,6 +28,7 @@
           #:session
           #:rem-session
           #:cookie-session-mixin
+          #:clear-session
           #:*session-key*
           #:*session-timeout*
 

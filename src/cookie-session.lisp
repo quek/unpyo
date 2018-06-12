@@ -48,3 +48,7 @@
         (remove-if (lambda (x)
                      (string-equal key (car x)))
                    *cookie-session-alist*)))
+
+(defun clear-session ()
+  (load-session-from-cookie)
+  (setf *cookie-session-alist* nil))
