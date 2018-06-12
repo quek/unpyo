@@ -35,19 +35,25 @@
          (subseq path (1+ it))
          nil)))
 
-(let ((key (chunk "Content-Type")))
+(let ((key1 (chunk "Content-Type"))
+      (key2 (chunk "content-type")))
   (defun request-content-type (request)
-    (awhen (cdr (assoc key (request-headers request) :test #'chunk=))
+    (awhen (cdr (or (assoc key1 (request-headers request) :test #'chunk=)
+                    (assoc key2 (request-headers request) :test #'chunk=)))
       (request-header-value-string it))))
 
-(let ((key (chunk "Content-Length")))
+(let ((key1 (chunk "Content-Length"))
+      (key2 (chunk "content-length")))
   (defun request-content-length (request)
-    (awhen (cdr (assoc key (request-headers request) :test #'chunk=))
+    (awhen (cdr (or (assoc key1 (request-headers request) :test #'chunk=)
+                    (assoc key2 (request-headers request) :test #'chunk=)))
       (parse-integer (request-header-value-string it)))))
 
-(let ((key (chunk "Cookie")))
+(let ((key1 (chunk "Cookie"))
+      (key2 (chunk "cookie")))
   (defun request-cookie (request)
-    (awhen (cdr (assoc key (request-headers request) :test #'chunk=))
+    (awhen (cdr (or (assoc key1 (request-headers request) :test #'chunk=)
+                    (assoc key2 (request-headers request) :test #'chunk=)))
       (request-header-value-string it))))
 
 (defun request-header-value-string (chunk)
@@ -165,7 +171,7 @@
                         "boundary"
                         (rfc2388:header-parameters
                          (rfc2388:parse-header (request-content-type request) :value)))))
-        (body (request-body request)))
+        (body (request-body request :latin1)))
     (when boundary
       (setf (request-params request)
             (append
@@ -231,7 +237,7 @@
                  (loop-finish)))))
   start)
 
-(defun request-body (&optional (request *request*))
+(defun request-body (&optional (request *request*) (external-format :utf8))
   (sif (request-%body request)
        it
        (setf it
@@ -240,7 +246,7 @@
                    (let* ((buffer (fast-io:make-octet-vector content-length))
                           (stream (request-stream request)))
                      (read-sequence buffer stream)
-                     (sb-ext:octets-to-string buffer))
+                     (sb-ext:octets-to-string buffer :external-format external-format))
                    "")))))
 
 #|
