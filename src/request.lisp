@@ -36,6 +36,7 @@
          nil)))
 
 (let ((key1 (chunk "Content-Type"))
+      ;; webpack-dev-server が小文字にしちゃう https://github.com/webpack/webpack-dev-server/issues/534
       (key2 (chunk "content-type")))
   (defun request-content-type (request)
     (awhen (cdr (or (assoc key1 (request-headers request) :test #'chunk=)
