@@ -46,7 +46,7 @@
          (defun ,name-method ()
            (let ((,start (local-time:now)))
              (log:info "start action")
-             (log:debug (request-params *request*))
+             (log:info (request-params *request*))
              (unwind-protect
                   (with-@param ,@body)
                (multiple-value-bind (m n)
