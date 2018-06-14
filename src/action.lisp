@@ -95,14 +95,15 @@
                                               (push (subseq part 1) binds)
                                               "([^/]+)")
                                   else
-                                    collect (ppcre:quote-meta-chars part)))))
+                                    collect (ppcre:quote-meta-chars part))))
+             (binds (nreverse binds)))
         (lambda (url method)
           (and (or (null route-method)
                    (string-equal method route-method))
                (multiple-value-bind (match-p groups) (ppcre:scan-to-strings regex url)
                  (when match-p
                    (loop for group across groups
-                         for bind in (nreverse binds)
+                         for bind in binds
                          do (setf (param bind)
                                   (percent-encoding:decode
                                    group :encoding :utf-8
