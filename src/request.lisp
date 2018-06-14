@@ -115,7 +115,7 @@
         (aif (request-query-string request)
              (%prepare-params it)
              nil))
-  (when (eq (request-method request) :post)
+  (when (member (request-method request) '(:post :patch :put))
     (setf (request-body-start request) (+ 4 request-header-length) ;4 is crlfcrlf
           (request-body-end request) read-length)
     (let ((content-type (request-content-type request)))
