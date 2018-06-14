@@ -102,7 +102,7 @@
                (multiple-value-bind (match-p groups) (ppcre:scan-to-strings regex url)
                  (when match-p
                    (loop for group across groups
-                         for bind in binds
+                         for bind in (nreverse binds)
                          do (setf (param bind)
                                   (percent-encoding:decode
                                    group :encoding :utf-8
