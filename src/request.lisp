@@ -84,7 +84,7 @@
         cr)))
 
 (defun param (&rest keys)
-  (apply #'%param (request-params *request*) keys))
+  (%param (request-params *request*) keys))
 
 (defun (setf param) (value &rest keys)
   (setf (request-params *request*)
@@ -96,19 +96,23 @@
                           value
                           (request-params *request*))))
 
-(defun %param (params &rest keys)
-  (reduce (lambda (value key)
-            (if (atom value)
-                value
-                (typecase key
-                  (number
-                   (nth key value))
-                  (symbol
-                   (cdr (assoc key value :test 'string-equal)))
-                  (t
-                   (cdr (assoc key value :test 'equal))))))
-          keys
-          :initial-value params))
+(defun %param (params keys)
+  (if (endp keys)
+      (values params t)
+      (let ((key (car keys)))
+        (typecase key
+          (number
+           (%param (nth key params) (cdr keys)))
+          (symbol
+           (let ((cons (assoc key params :test 'string-equal)))
+             (if cons
+                 (%param (cdr cons) (cdr keys))
+                 (values nil nil))))
+          (t
+           (let ((cons (assoc key params :test 'equal)))
+             (if cons
+                 (%param (cdr cons) (cdr keys))
+                 (values nil nil))))))))
 
 (defun prepare-params (request request-header-length read-length)
   (setf (request-params request)
