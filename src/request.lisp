@@ -178,27 +178,30 @@
                          (rfc2388:parse-header (request-content-type request) :value)))))
         (body (request-body request :latin1)))
     (when boundary
-      (setf (request-params request)
-            (append
-             (loop for part in (rfc2388:parse-mime body boundary)
-                   for headers = (rfc2388:mime-part-headers part)
-                   for content-disposition-header = (rfc2388:find-content-disposition-header headers)
-                   for name = (cdr (rfc2388:find-parameter
-                                    "name"
-                                    (rfc2388:header-parameters content-disposition-header)))
-                   when name
-                     collect (cons name
-                                   (let ((contents (rfc2388:mime-part-contents part)))
-                                     (if (pathnamep contents)
-                                         (progn
-                                           (push (lambda () (delete-file contents))
-                                                 (request-cleanup request))
-                                           (list contents
-                                                 (decode-file-name (rfc2388:get-file-name headers))
-                                                 (rfc2388:content-type part :as-string t)))
-                                         (sb-ext:octets-to-string
-                                          (map '(vector (unsigned-byte 8) *) #'char-code contents))))))
-             (request-params request))))))
+      (let ((params (request-params request)))
+        (loop for part in (rfc2388:parse-mime body boundary)
+              for headers = (rfc2388:mime-part-headers part)
+              for content-disposition-header = (rfc2388:find-content-disposition-header headers)
+              for name = (cdr (rfc2388:find-parameter
+                               "name"
+                               (rfc2388:header-parameters content-disposition-header)))
+              when name
+                do (setf params
+                         (%%prepare-params
+                          (mapcar (lambda (x) (string-right-trim "]" x))
+                                  (split-sequence:split-sequence #\[ name))
+                          (let ((contents (rfc2388:mime-part-contents part)))
+                            (if (pathnamep contents)
+                                (progn
+                                  (push (lambda () (delete-file contents))
+                                        (request-cleanup request))
+                                  (list contents
+                                        (decode-file-name (rfc2388:get-file-name headers))
+                                        (rfc2388:content-type part :as-string t)))
+                                (sb-ext:octets-to-string
+                                 (map '(vector (unsigned-byte 8) *) #'char-code contents))))
+                          params)))
+        (setf (request-params request) params)))))
 
 (defun decode-file-name (file-name)
   (sb-ext:octets-to-string
