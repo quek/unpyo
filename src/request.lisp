@@ -97,22 +97,25 @@
                           (request-params *request*))))
 
 (defun %param (params keys)
-  (if (endp keys)
-      (values params t)
-      (let ((key (car keys)))
-        (typecase key
-          (number
-           (%param (nth key params) (cdr keys)))
-          (symbol
-           (let ((cons (assoc key params :test 'string-equal)))
-             (if cons
-                 (%param (cdr cons) (cdr keys))
-                 (values nil nil))))
-          (t
-           (let ((cons (assoc key params :test 'equal)))
-             (if cons
-                 (%param (cdr cons) (cdr keys))
-                 (values nil nil))))))))
+  (if (or (typep params 'jsonq:obj)
+          (typep params 'jsonq:arr))
+      (apply #'jsonq:q params keys)
+   (if (endp keys)
+       (values params t)
+       (let ((key (car keys)))
+         (typecase key
+           (number
+            (%param (nth key params) (cdr keys)))
+           (symbol
+            (let ((cons (assoc key params :test 'string-equal)))
+              (if cons
+                  (%param (cdr cons) (cdr keys))
+                  (values nil nil))))
+           (t
+            (let ((cons (assoc key params :test 'equal)))
+              (if cons
+                  (%param (cdr cons) (cdr keys))
+                  (values nil nil)))))))))
 
 (defun prepare-params (request request-header-length read-length)
   (setf (request-params request)
@@ -210,8 +213,8 @@
 
 (defun request-json-body-to-params (request)
   (aif (request-body request)
-   (setf (request-params request)
-         (json:decode-json-from-string it))))
+       (setf (request-params request)
+             (jsonq:lisp (jsonq:read-json-from-string it)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; stream
