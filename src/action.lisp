@@ -40,7 +40,7 @@
                         (route-priority (compute-route-priority path))
                         (def-path-p (eq method :get)))
                      &body body)
-  (let ((name-method (if method (intern (str name ":" method)) name)))
+  (let ((name-method (if (eq method :get) name (intern (str name "--" method)))))
     (let ((start (gensym)))
       `(progn
          (defun ,name-method ()
