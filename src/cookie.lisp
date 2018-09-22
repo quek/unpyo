@@ -6,8 +6,8 @@
   expires
   (path "/")
   domain
-  secure
-  http-only)
+  (secure t)
+  (http-only t))
 
 (defun format-cookie-date (cookie)
   "(make-cookie :name \"a\" :value \"b\" :expires '(3 :minute))
