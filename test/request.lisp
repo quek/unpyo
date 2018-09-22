@@ -108,19 +108,5 @@
         (is (eq t (drakma:cookie-http-only-p x)))))))
 
 
-(def-test-app-action /set-session ()
-  (setf (unpyo:session "foo") '(1 2 3)))
-
-(def-test-app-action /get-session ()
-  (let ((foo (unpyo:session "foo")))
-    (push 0 foo)
-   (unpyo:html foo)))
-
-(test session
-  (let ((cookie-jar (make-instance 'drakma:cookie-jar)))
-    (drakma:http-request (test-url "/set-session") :cookie-jar cookie-jar)
-    (is (equal "(0 1 2 3)"
-               (drakma:http-request (test-url "/get-session") :cookie-jar cookie-jar)))))
-
 (with-test-server (server)
   (debug!))

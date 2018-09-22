@@ -25,12 +25,6 @@
           #:authorization
           #:require-authorization
           #:cookie
-          #:session
-          #:rem-session
-          #:cookie-session-mixin
-          #:clear-session
-          #:*session-key*
-          #:*session-timeout*
 
           #:response-status
           #:response-header

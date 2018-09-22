@@ -12,7 +12,6 @@
                (:file "util")
                (:file "condition")
                (:file "const")
-               (:file "encrypt")
                (:file "buffer")
                (:file "writev")
                (:file "request")
@@ -22,8 +21,7 @@
                (:file "action")
                (:file "app")
                (:file "static-app")
-               (:file "cookie")
-               (:file "cookie-session"))
+               (:file "cookie"))
   :depends-on (:anaphora
                :cffi
                :local-time
