@@ -39,28 +39,28 @@
       ;; webpack-dev-server が小文字にしちゃう https://github.com/webpack/webpack-dev-server/issues/534
       (key2 (chunk "content-type")))
   (defun request-content-type (request)
-    (awhen (cdr (or (assoc key1 (request-headers request) :test #'chunk=)
-                    (assoc key2 (request-headers request) :test #'chunk=)))
+    (awhen (cdr (or (assoc key1 (request-header-chunks request) :test #'chunk=)
+                    (assoc key2 (request-header-chunks request) :test #'chunk=)))
       (request-header-value-string it))))
 
 (let ((key1 (chunk "Content-Length"))
       (key2 (chunk "content-length")))
   (defun request-content-length (request)
-    (awhen (cdr (or (assoc key1 (request-headers request) :test #'chunk=)
-                    (assoc key2 (request-headers request) :test #'chunk=)))
+    (awhen (cdr (or (assoc key1 (request-header-chunks request) :test #'chunk=)
+                    (assoc key2 (request-header-chunks request) :test #'chunk=)))
       (parse-integer (request-header-value-string it)))))
 
 (let ((key1 (chunk "Cookie"))
       (key2 (chunk "cookie")))
   (defun request-cookie (request)
-    (awhen (cdr (or (assoc key1 (request-headers request) :test #'chunk=)
-                    (assoc key2 (request-headers request) :test #'chunk=)))
+    (awhen (cdr (or (assoc key1 (request-header-chunks request) :test #'chunk=)
+                    (assoc key2 (request-header-chunks request) :test #'chunk=)))
       (request-header-value-string it))))
 
 (defun request-header-value-string (chunk)
   (ppcre:regex-replace-all (ppcre:create-scanner "^\\s+" :multi-line-mode t) (chunk-to-string chunk) "" ))
 
-(defun request-headers (request)
+(defun request-header-chunks (request)
   (if (eq (request-%headers request) +unbound+)
       (setf (request-%headers request)
             (loop with buffer = (request-buffer request)
@@ -70,7 +70,12 @@
                   collect (let* ((colon (position #.(char-code #\:) buffer :start (+ i 3)))
                                  (key (make-chunk :vector buffer :start (+ i 2) :end colon))
                                  (cr (request-header-value-end-position buffer (1+ colon)))
-                                 (val (make-chunk :vector buffer :start (1+ colon) :end cr)))
+                                 (val-start (loop for i from (1+ colon) below cr
+                                                  if (/= (aref buffer i)
+                                                         #.(char-code #\space))
+                                                    do (loop-finish)
+                                                  finally (return i)))
+                                 (val (make-chunk :vector buffer :start val-start :end cr)))
                             (setf i cr)
                             (cons key val))))
       (request-%headers request)))
@@ -202,7 +207,8 @@
                                         (decode-file-name (rfc2388:get-file-name headers))
                                         (rfc2388:content-type part :as-string t)))
                                 (sb-ext:octets-to-string
-                                 (map '(vector (unsigned-byte 8) *) #'char-code contents))))
+                                 (map '(vector (unsigned-byte 8) *) #'char-code contents)
+                                 :external-format :utf8)))
                           params)))
         (setf (request-params request) params)))))
 
@@ -259,6 +265,11 @@
                      (read-sequence buffer stream)
                      (sb-ext:octets-to-string buffer :external-format external-format))
                    "")))))
+
+(defun request-headers (&optional (request *request*))
+  (loop for (key . value) in (request-header-chunks request)
+        collect (cons (chunk-to-string key)
+                      (chunk-to-string value))))
 
 #|
 (defun cookie (name)

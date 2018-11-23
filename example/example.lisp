@@ -15,7 +15,7 @@
 (defun dump-env ()
   (html
     (:ul
-     (loop for (key . val) in (unpyo::request-headers *request*)
+     (loop for (key . val) in (unpyo::request-header-chunks *request*)
            do (html (:li (:pre (unpyo::chunk-to-string key) " => "
                                (unpyo::request-header-value-string  val))))))))
 
