@@ -41,28 +41,18 @@
                         (def-path-p (eq method :get)))
                      &body body)
   (let ((name-method (if (eq method :get) name (intern (str name "--" method)))))
-    (let ((start (gensym)))
-      `(progn
-         (defun ,name-method ()
-           (let ((,start (local-time:now)))
-             (log:info "start action")
-             (log:info (request-params *request*))
-             (unwind-protect
-                  (with-@param ,@body)
-               (multiple-value-bind (m n)
-                   (truncate (ceiling (local-time:timestamp-difference (local-time:now) ,start)
-                                      0.000001)
-                             1000)
-                 (log:info "end action (~d.~dms)" m n)))))
-         ,@(when def-path-p (make-path-function-form name))
-         (add-to-routes ',app-class
-                        (make-route :action ',name-method
-                                    :name ',name
-                                    :method ,method
-                                    :path ,path
-                                    :function ,(or route-function
-                                                   `(make-route-function ,path ,method))
-                                    :priority ,route-priority))))))
+    `(progn
+       (defun ,name-method ()
+         (with-@param ,@body))
+       ,@(when def-path-p (make-path-function-form name))
+       (add-to-routes ',app-class
+                      (make-route :action ',name-method
+                                  :name ',name
+                                  :method ,method
+                                  :path ,path
+                                  :function ,(or route-function
+                                                 `(make-route-function ,path ,method))
+                                  :priority ,route-priority)))))
 
 (defun make-path-function-form (name)
   (let* ((format (str (ppcre:regex-replace-all "@[^/]+" (string-downcase name) "~a")
