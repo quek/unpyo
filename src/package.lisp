@@ -21,6 +21,7 @@
           #:request-stream
           #:request-body
           #:request-headers
+          #:request-header-value
           #:request-method
           #:content-type
           #:authorization

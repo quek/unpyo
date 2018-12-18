@@ -271,6 +271,10 @@
         collect (cons (chunk-to-string key)
                       (chunk-to-string value))))
 
+(defun request-header-value (name &optional (request *request*))
+  (loop for (key . value) in (request-headers request)
+          thereis (and (string-equal name key) value)))
+
 #|
 (defun cookie (name)
   (and *request*
