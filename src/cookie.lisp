@@ -6,8 +6,8 @@
   expires
   (path "/")
   domain
-  secure
-  http-only)
+  (secure t)
+  (http-only t))
 
 (defun format-cookie-date (cookie)
   "(make-cookie :name \"a\" :value \"b\" :expires '(3 :minute))
@@ -57,7 +57,10 @@
        (and value (percent-decode value))))))
 
 (defun (setf cookie) (value name &rest cookie-init-args)
-  (push (apply #'make-cookie :name name :value value cookie-init-args)
-        (response-cookies *response*))
+  (let ((cookies (response-cookies *response*)))
+    (setf cookies (delete name cookies :key #'cookie-name :test #'equal))
+    (push (apply #'make-cookie :name name :value value cookie-init-args)
+          cookies)
+    (setf (response-cookies *response*) cookies))
   value)
 

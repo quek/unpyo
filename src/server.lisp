@@ -89,7 +89,7 @@
   (push
    (sb-thread:make-thread 'request-loop
                           :arguments (list server)
-                          :name "unpyo worker")
+                          :name (format nil "unpyo worker ~a" (gensym)))
    (server-threads server)))
 
 (defun request-loop (server)

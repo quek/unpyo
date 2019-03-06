@@ -39,28 +39,28 @@
       ;; webpack-dev-server が小文字にしちゃう https://github.com/webpack/webpack-dev-server/issues/534
       (key2 (chunk "content-type")))
   (defun request-content-type (request)
-    (awhen (cdr (or (assoc key1 (request-headers request) :test #'chunk=)
-                    (assoc key2 (request-headers request) :test #'chunk=)))
+    (awhen (cdr (or (assoc key1 (request-header-chunks request) :test #'chunk=)
+                    (assoc key2 (request-header-chunks request) :test #'chunk=)))
       (request-header-value-string it))))
 
 (let ((key1 (chunk "Content-Length"))
       (key2 (chunk "content-length")))
   (defun request-content-length (request)
-    (awhen (cdr (or (assoc key1 (request-headers request) :test #'chunk=)
-                    (assoc key2 (request-headers request) :test #'chunk=)))
+    (awhen (cdr (or (assoc key1 (request-header-chunks request) :test #'chunk=)
+                    (assoc key2 (request-header-chunks request) :test #'chunk=)))
       (parse-integer (request-header-value-string it)))))
 
 (let ((key1 (chunk "Cookie"))
       (key2 (chunk "cookie")))
   (defun request-cookie (request)
-    (awhen (cdr (or (assoc key1 (request-headers request) :test #'chunk=)
-                    (assoc key2 (request-headers request) :test #'chunk=)))
+    (awhen (cdr (or (assoc key1 (request-header-chunks request) :test #'chunk=)
+                    (assoc key2 (request-header-chunks request) :test #'chunk=)))
       (request-header-value-string it))))
 
 (defun request-header-value-string (chunk)
   (ppcre:regex-replace-all (ppcre:create-scanner "^\\s+" :multi-line-mode t) (chunk-to-string chunk) "" ))
 
-(defun request-headers (request)
+(defun request-header-chunks (request)
   (if (eq (request-%headers request) +unbound+)
       (setf (request-%headers request)
             (loop with buffer = (request-buffer request)
@@ -70,7 +70,12 @@
                   collect (let* ((colon (position #.(char-code #\:) buffer :start (+ i 3)))
                                  (key (make-chunk :vector buffer :start (+ i 2) :end colon))
                                  (cr (request-header-value-end-position buffer (1+ colon)))
-                                 (val (make-chunk :vector buffer :start (1+ colon) :end cr)))
+                                 (val-start (loop for i from (1+ colon) below cr
+                                                  if (/= (aref buffer i)
+                                                         #.(char-code #\space))
+                                                    do (loop-finish)
+                                                  finally (return i)))
+                                 (val (make-chunk :vector buffer :start val-start :end cr)))
                             (setf i cr)
                             (cons key val))))
       (request-%headers request)))
@@ -84,7 +89,7 @@
         cr)))
 
 (defun param (&rest keys)
-  (apply #'%param (request-params *request*) keys))
+  (%param (request-params *request*) keys))
 
 (defun (setf param) (value &rest keys)
   (setf (request-params *request*)
@@ -96,19 +101,26 @@
                           value
                           (request-params *request*))))
 
-(defun %param (params &rest keys)
-  (reduce (lambda (value key)
-            (if (atom value)
-                value
-                (typecase key
-                  (number
-                   (nth key value))
-                  (symbol
-                   (cdr (assoc key value :test 'string-equal)))
-                  (t
-                   (cdr (assoc key value :test 'equal))))))
-          keys
-          :initial-value params))
+(defun %param (params keys)
+  (if (or (typep params 'jsonq:obj)
+          (typep params 'jsonq:arr))
+      (apply #'jsonq:q params keys)
+   (if (endp keys)
+       (values params t)
+       (let ((key (car keys)))
+         (typecase key
+           (number
+            (%param (nth key params) (cdr keys)))
+           (symbol
+            (let ((cons (assoc key params :test 'string-equal)))
+              (if cons
+                  (%param (cdr cons) (cdr keys))
+                  (values nil nil))))
+           (t
+            (let ((cons (assoc key params :test 'equal)))
+              (if cons
+                  (%param (cdr cons) (cdr keys))
+                  (values nil nil)))))))))
 
 (defun prepare-params (request request-header-length read-length)
   (setf (request-params request)
@@ -174,27 +186,31 @@
                          (rfc2388:parse-header (request-content-type request) :value)))))
         (body (request-body request :latin1)))
     (when boundary
-      (setf (request-params request)
-            (append
-             (loop for part in (rfc2388:parse-mime body boundary)
-                   for headers = (rfc2388:mime-part-headers part)
-                   for content-disposition-header = (rfc2388:find-content-disposition-header headers)
-                   for name = (cdr (rfc2388:find-parameter
-                                    "name"
-                                    (rfc2388:header-parameters content-disposition-header)))
-                   when name
-                     collect (cons name
-                                   (let ((contents (rfc2388:mime-part-contents part)))
-                                     (if (pathnamep contents)
-                                         (progn
-                                           (push (lambda () (delete-file contents))
-                                                 (request-cleanup request))
-                                           (list contents
-                                                 (decode-file-name (rfc2388:get-file-name headers))
-                                                 (rfc2388:content-type part :as-string t)))
-                                         (sb-ext:octets-to-string
-                                          (map '(vector (unsigned-byte 8) *) #'char-code contents))))))
-             (request-params request))))))
+      (let ((params (request-params request)))
+        (loop for part in (rfc2388:parse-mime body boundary)
+              for headers = (rfc2388:mime-part-headers part)
+              for content-disposition-header = (rfc2388:find-content-disposition-header headers)
+              for name = (cdr (rfc2388:find-parameter
+                               "name"
+                               (rfc2388:header-parameters content-disposition-header)))
+              when name
+                do (setf params
+                         (%%prepare-params
+                          (mapcar (lambda (x) (string-right-trim "]" x))
+                                  (split-sequence:split-sequence #\[ name))
+                          (let ((contents (rfc2388:mime-part-contents part)))
+                            (if (pathnamep contents)
+                                (progn
+                                  (push (lambda () (delete-file contents))
+                                        (request-cleanup request))
+                                  (list contents
+                                        (decode-file-name (rfc2388:get-file-name headers))
+                                        (rfc2388:content-type part :as-string t)))
+                                (sb-ext:octets-to-string
+                                 (map '(vector (unsigned-byte 8) *) #'char-code contents)
+                                 :external-format :utf8)))
+                          params)))
+        (setf (request-params request) params)))))
 
 (defun decode-file-name (file-name)
   (sb-ext:octets-to-string
@@ -203,8 +219,8 @@
 
 (defun request-json-body-to-params (request)
   (aif (request-body request)
-   (setf (request-params request)
-         (json:decode-json-from-string it))))
+       (setf (request-params request)
+             (jsonq:lisp (jsonq:read-json-from-string it)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; stream
@@ -249,6 +265,15 @@
                      (read-sequence buffer stream)
                      (sb-ext:octets-to-string buffer :external-format external-format))
                    "")))))
+
+(defun request-headers (&optional (request *request*))
+  (loop for (key . value) in (request-header-chunks request)
+        collect (cons (chunk-to-string key)
+                      (chunk-to-string value))))
+
+(defun request-header-value (name &optional (request *request*))
+  (loop for (key . value) in (request-headers request)
+          thereis (and (string-equal name key) value)))
 
 #|
 (defun cookie (name)

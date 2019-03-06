@@ -20,17 +20,13 @@
           #:request-path
           #:request-stream
           #:request-body
+          #:request-headers
+          #:request-header-value
           #:request-method
           #:content-type
           #:authorization
           #:require-authorization
           #:cookie
-          #:session
-          #:rem-session
-          #:cookie-session-mixin
-          #:clear-session
-          #:*session-key*
-          #:*session-timeout*
 
           #:response-status
           #:response-header

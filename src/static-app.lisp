@@ -12,7 +12,7 @@
 
 (defun handle-static-file (url static-mappings)
   (when (or (some (lambda (x) (search x url))
-                  '(".." "//"))
+                  '(".." "//" "*"))
             (char= #\/ (alexandria:last-elt url)))
     (return-from handle-static-file nil))
   (loop for (uri-prefix base-path) in static-mappings
