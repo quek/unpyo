@@ -68,9 +68,8 @@ Connection: close
   (setf (response-status *response*) 301)
   (setf (response-header *response* "Location") url))
 
-
-(defun send-json (json)
-  (vector-push-extend (string-to-octets json) (response-body *response*))
+(defun render-json (json)
+  (vector-push-extend (string-to-octets (princ-to-string json)) (response-body *response*))
   (setf (response-content-type *response*) "application/json"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

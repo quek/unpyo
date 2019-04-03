@@ -31,7 +31,7 @@
           #:response-status
           #:response-header
           #:response-stream
-          #:send-json
+          #:render-json
 
           #:def-application
           #:call-next-action
