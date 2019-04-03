@@ -88,16 +88,21 @@
         (request-header-value-end-position buffer (+ cr 2))
         cr)))
 
+(defparameter *param-key-stringify* #'string-downcase)
+
+(defun %param-key-stringify* (keys)
+  (mapcar (lambda (x)
+            (typecase x
+              (string x)
+              (t (funcall *param-key-stringify* x))))
+          keys))
+
 (defun param (&rest keys)
-  (%param (request-params *request*) keys))
+  (%param (request-params *request*) (%param-key-stringify* keys)))
 
 (defun (setf param) (value &rest keys)
   (setf (request-params *request*)
-        (%%prepare-params (mapcar (lambda (x)
-                                    (typecase x
-                                      (string x)
-                                      (t (string-downcase x))))
-                                  keys)
+        (%%prepare-params (%param-key-stringify* keys)
                           value
                           (request-params *request*))))
 

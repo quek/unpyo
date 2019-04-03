@@ -44,6 +44,7 @@
           #:application
           #:static-application
 
+          #:*param-key-stringify*
           #:*invoke-debugger-p*
 
           #:*exit-function*
