@@ -88,13 +88,13 @@
         (request-header-value-end-position buffer (+ cr 2))
         cr)))
 
-(defparameter *param-key-stringify* #'string-downcase)
+(defvar *param-key-stringify* #'string-downcase)
 
 (defun %param-key-stringify* (keys)
   (mapcar (lambda (x)
             (typecase x
-              (string x)
-              (t (funcall *param-key-stringify* x))))
+              (symbol (funcall *param-key-stringify* x))
+              (t x)))
           keys))
 
 (defun param (&rest keys)
