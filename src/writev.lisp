@@ -8,7 +8,7 @@
   ;; Number of bytes to transfer
   (iov-len :uint64))
 
-(sb-posix::define-call* "writev" sb-alien:ssize-t minusp
+(sb-posix::define-call* "writev" (sb-alien:signed 64) minusp
   (fd sb-posix:file-descriptor) (iov (* t)) (iovcnt sb-alien:size-t))
 
 
