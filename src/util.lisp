@@ -101,6 +101,15 @@
                   for j from (chunk-start b)
                     thereis (/= (aref u i) (aref v j))))))
 
+(defun chunk-equal (a b)
+  (and (= (- (chunk-end a) (chunk-start a)) (- (chunk-end b) (chunk-start b)))
+       (not (loop with u = (chunk-vector a)
+                  with v = (chunk-vector b)
+                  for i from (chunk-start a) below (chunk-end a)
+                  for j from (chunk-start b)
+                    thereis (char-not-equal (code-char (aref u i))
+                                            (code-char (aref v j)))))))
+
 (defun chunk-to-string (chunk)
   (sb-ext:octets-to-string (chunk-vector chunk)
                            :start (chunk-start chunk)

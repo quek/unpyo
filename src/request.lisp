@@ -75,6 +75,10 @@
                             (cons key val))))
       (request-%headers request)))
 
+(defun request-header-value (name &optional (*request* *request*))
+  (awhen (cdr (assoc (chunk name) (request-headers *request*) :test #'chunk-equal))
+    (request-header-value-string it)))
+
 (defun request-header-value-end-position (buffer start)
   (let* ((cr (position #.(char-code #\cr) buffer :start start))
          (next-line (aref buffer (+ cr 2))))
