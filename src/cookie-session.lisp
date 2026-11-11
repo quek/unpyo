@@ -17,7 +17,10 @@
   (let ((*cookie-session-alist* :unboud))
     (call-next-method)
     (unless (eq *cookie-session-alist* :unboud)
-      (setf (cookie *session-key* :expires *session-timeout* :path "/" :http-only t)
+      ;; SameSite=Lax: ほかのサイトから送られる POST などにはクッキーを付けない（CSRF の対策）。
+      ;; Strict にすると、Google のログインから戻ったときにクッキーが付かず、ログインできない。
+      (setf (cookie *session-key* :expires *session-timeout* :path "/" :http-only t
+                                  :same-site "Lax")
             (base64:usb8-array-to-base64-string
              (encrypt (prin1-to-string *cookie-session-alist*)
                       (slot-value self 'cookie-session-key)))))))

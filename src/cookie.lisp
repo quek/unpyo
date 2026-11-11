@@ -7,7 +7,9 @@
   (path "/")
   domain
   secure
-  http-only)
+  http-only
+  ;; "Lax" "Strict" "None" のどれか。nil なら付けない。
+  same-site)
 
 (defun format-cookie-date (cookie)
   "(make-cookie :name \"a\" :value \"b\" :expires '(3 :minute))
@@ -34,14 +36,15 @@
 (defmethod print-object ((cookie cookie) stream)
   (format
    stream
-   "~a=~a~:[~;~:*; Expires=~a~]~:[~;~:*; Path=~a~]~:[~;~:*; Domain=~a~]~:[~;; Secure~]~:[~;; HttpOnly~]"
+   "~a=~a~:[~;~:*; Expires=~a~]~:[~;~:*; Path=~a~]~:[~;~:*; Domain=~a~]~:[~;; Secure~]~:[~;; HttpOnly~]~:[~;~:*; SameSite=~a~]"
    (percent-encode (cookie-name cookie))
    (percent-encode (cookie-value cookie))
    (format-cookie-date cookie)
    (cookie-path cookie)
    (cookie-domain cookie)
    (cookie-secure cookie)
-   (cookie-http-only cookie)))
+   (cookie-http-only cookie)
+   (cookie-same-site cookie)))
 
 (defun cookie (name)
   (or
