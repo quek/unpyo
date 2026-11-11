@@ -29,11 +29,15 @@
   (when (eq *cookie-session-alist* :unboud)
     (setf *cookie-session-alist*
           (awhen (cookie *session-key*)
-            (with-standard-io-syntax
-              (let ((*read-eval* nil))
-                (read-from-string
-                 (decrypt (base64:base64-string-to-usb8-array it)
-                          (slot-value *application* 'cookie-session-key)))))))))
+            ;; 鍵を変える前のクッキーや、書き換えられたクッキーは読めない。エラーにはせず、
+            ;; セッションなしとして扱う（新しいセッションのクッキーで上書きされる）。
+            (handler-case
+                (with-standard-io-syntax
+                  (let ((*read-eval* nil))
+                    (read-from-string
+                     (decrypt (base64:base64-string-to-usb8-array it)
+                              (slot-value *application* 'cookie-session-key)))))
+              (error () nil))))))
 
 (defun session (key)
   (load-session-from-cookie)
