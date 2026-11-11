@@ -17,7 +17,10 @@
   (let ((*cookie-session-alist* :unboud))
     (call-next-method)
     (unless (eq *cookie-session-alist* :unboud)
-      (setf (cookie *session-key* :expires *session-timeout* :path "/" :http-only t)
+      ;; SameSite=Lax: ほかのサイトから送られる POST などにはクッキーを付けない（CSRF の対策）。
+      ;; Strict にすると、Google のログインから戻ったときにクッキーが付かず、ログインできない。
+      (setf (cookie *session-key* :expires *session-timeout* :path "/" :http-only t
+                                  :same-site "Lax")
             (base64:usb8-array-to-base64-string
              (encrypt (prin1-to-string *cookie-session-alist*)
                       (slot-value self 'cookie-session-key)))))))
@@ -26,11 +29,15 @@
   (when (eq *cookie-session-alist* :unboud)
     (setf *cookie-session-alist*
           (awhen (cookie *session-key*)
-            (with-standard-io-syntax
-              (let ((*read-eval* nil))
-                (read-from-string
-                 (decrypt (base64:base64-string-to-usb8-array it)
-                          (slot-value *application* 'cookie-session-key)))))))))
+            ;; 鍵を変える前のクッキーや、書き換えられたクッキーは読めない。エラーにはせず、
+            ;; セッションなしとして扱う（新しいセッションのクッキーで上書きされる）。
+            (handler-case
+                (with-standard-io-syntax
+                  (let ((*read-eval* nil))
+                    (read-from-string
+                     (decrypt (base64:base64-string-to-usb8-array it)
+                              (slot-value *application* 'cookie-session-key)))))
+              (error () nil))))))
 
 (defun session (key)
   (load-session-from-cookie)

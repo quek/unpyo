@@ -87,13 +87,26 @@
      key)))
 
 
+;; int RAND_bytes(unsigned char *buf, int num);
+(cffi:defcfun ("RAND_bytes" %rand-bytes) :int
+  (buf :pointer)
+  (num :int))
+
+(defun random-bytes (n)
+  "暗号に使える乱数（OpenSSL の RAND_bytes）で n バイトを作る。
+CL の random は暗号用ではなく、SBCL では起動のたびに同じ列から始まるので使わない。"
+  (let ((buffer (make-array n :element-type '(unsigned-byte 8))))
+    (sb-sys:with-pinned-objects (buffer)
+      (unless (= 1 (%rand-bytes (sb-sys:vector-sap buffer) n))
+        (error "RAND_bytes")))
+    buffer))
+
 (defun encrypt (message key)
   (let* ((message (sb-ext:string-to-octets message))
          (message-length (length message))
         (out (make-array (+ message-length 16 12) :element-type '(unsigned-byte 8)))
-        (iv (make-array 12 :element-type '(unsigned-byte 8))))
-    (loop for i below 12
-          do (setf (aref iv i) (random 256)))
+        ;; GCM は、同じ鍵で IV が一度でも重なると、改ざんを防げなくなる。
+        (iv (random-bytes 12)))
     (cffi:with-foreign-objects ((outl :int 1))
       (let ((ctx (evp-cipher-ctx-new))
             (pos 0))
