@@ -2,7 +2,10 @@
 
 (defstruct request
   socket
-  (buffer (make-array 4096 :element-type '(unsigned-byte 8)))
+  ;; リクエストヘッダー（と、一緒に届いたボディの先頭）を読むバッファ。ヘッダーがこれに
+  ;; 収まらないと too large request header のエラーにする。前段の nginx が通す大きさ
+  ;; （large_client_header_buffers の既定で 4 x 8k）より大きくしておく。
+  (buffer (make-array +max-header+ :element-type '(unsigned-byte 8)))
   method
   path
   params
