@@ -26,9 +26,14 @@ Connection: close
           (response-status response)
           (gethash (response-status response) *http-status-codes*)
           (loop for i across (response-body response) sum (length i))
-          (response-content-type response)
-          (mapcar #'princ-to-string (response-cookies response))
-          (response-headers response)))
+          (header-safe (response-content-type response))
+          (mapcar #'header-safe (response-cookies response))
+          (loop for header in (response-headers response)
+                collect (mapcar #'header-safe header))))
+
+(defun header-safe (x)
+  "レスポンスヘッダーに書く値から改行を取りのぞく(ヘッダーの注入を防ぐ)。"
+  (remove-if (lambda (c) (member c '(#\cr #\lf))) (princ-to-string x)))
 
 #+nil
 (make-response-header (make-response :headers '(("a" "b"))))

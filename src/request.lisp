@@ -153,6 +153,9 @@
                              v params)))
     params))
 
+(defparameter *max-param-index* 1000
+  "a[N]=x 形式のパラメータの添字 N の上限。")
+
 (defun %%prepare-params (ks v params)
   (if (endp ks)
       v
@@ -160,6 +163,11 @@
         (if (every #'digit-char-p key)
             (progn
               (setf key (or (parse-integer key :junk-allowed t) (length params)))
+              ;; a[999999999]=x のような添字で巨大なリストを作らせない。
+              (when (> key *max-param-index*)
+                (error 'http-parse-error
+                       :format-control "Parameter index ~a is too large!"
+                       :format-arguments (list key)))
               (let ((lack (1+ (- key (length params)))))
                 (when (plusp lack)
                   (setf params (nconc params (make-list lack))))
