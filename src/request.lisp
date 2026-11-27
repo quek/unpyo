@@ -122,23 +122,52 @@
                   (%param (cdr cons) (cdr keys))
                   (values nil nil)))))))))
 
+(defparameter *max-param-elements* 10000
+  "添字付きのパラメータ(a[N]=x や a[]=x)で作るリストの要素数の、1 リクエストあたりの上限。")
+
+(defvar *param-elements* nil
+  "今のリクエストで、添字付きのパラメータから作った要素数。リクエストの解析中でなければ nil で、数えない。")
+
+(defun count-param-elements (count)
+  "a[999999999]=x や a1[1000]=&a2[1000]=... のような添字、大量の a[]= で、巨大なリストを作らせない。"
+  (when (and *param-elements*
+             (> (incf *param-elements* count) *max-param-elements*))
+    (error 'http-parse-error
+           :format-control "Too many indexed parameter elements! (~a > ~a)"
+           :format-arguments (list *param-elements* *max-param-elements*))))
+
+(defparameter *max-param-depth* 32
+  "a[b][c] 形式のパラメータ名の、入れ子の深さ([ の数)の上限。")
+
+(defun param-keys (name)
+  "a[b][c] 形式のパラメータ名を、鍵のリスト (\"a\" \"b\" \"c\") にする。"
+  ;; %%prepare-params は鍵の数だけ再帰するので、深く重ねた名前でスタックをあふれさせない。
+  (let ((depth (count #\[ name)))
+    (when (> depth *max-param-depth*)
+      (error 'http-parse-error
+             :format-control "Parameter name is nested too deeply! (~a > ~a)"
+             :format-arguments (list depth *max-param-depth*))))
+  (mapcar (lambda (x) (string-right-trim "]" x))
+          (split-sequence:split-sequence #\[ name)))
+
 (defun prepare-params (request request-header-length read-length)
-  (setf (request-params request)
-        (aif (request-query-string request)
-             (%prepare-params it)
-             nil))
-  (when (member (request-method request) '(:post :patch :put))
-    (setf (request-body-start request) (+ 4 request-header-length) ;4 is crlfcrlf
-          (request-body-end request) read-length)
-    (let ((content-type (request-content-type request)))
-      (cond ((alexandria:starts-with-subseq "application/x-www-form-urlencoded"
-                                            content-type)
-             (parse-request-body request))
-            ((alexandria:starts-with-subseq "multipart/form-data"
-                                            content-type)
-             (parse-multipart-form-data request))
-            ((alexandria:starts-with-subseq "application/json" content-type)
-             (request-json-body-to-params request))))))
+  (let ((*param-elements* 0))
+    (setf (request-params request)
+          (aif (request-query-string request)
+               (%prepare-params it)
+               nil))
+    (when (member (request-method request) '(:post :patch :put))
+      (setf (request-body-start request) (+ 4 request-header-length) ;4 is crlfcrlf
+            (request-body-end request) read-length)
+      (let ((content-type (request-content-type request)))
+        (cond ((alexandria:starts-with-subseq "application/x-www-form-urlencoded"
+                                              content-type)
+               (parse-request-body request))
+              ((alexandria:starts-with-subseq "multipart/form-data"
+                                              content-type)
+               (parse-multipart-form-data request))
+              ((alexandria:starts-with-subseq "application/json" content-type)
+               (request-json-body-to-params request)))))))
 
 (defun %prepare-params (query-string)
   (let (params)
@@ -147,14 +176,8 @@
           for k = (percent-decode %k)
           for v = (percent-decode %v)
           when (and k v)
-            do (setf params (%%prepare-params
-                             (mapcar (lambda (x) (string-right-trim "]" x))
-                                     (split-sequence:split-sequence #\[ k))
-                             v params)))
+            do (setf params (%%prepare-params (param-keys k) v params)))
     params))
-
-(defparameter *max-param-index* 1000
-  "a[N]=x 形式のパラメータの添字 N の上限。")
 
 (defun %%prepare-params (ks v params)
   (if (endp ks)
@@ -163,13 +186,10 @@
         (if (every #'digit-char-p key)
             (progn
               (setf key (or (parse-integer key :junk-allowed t) (length params)))
-              ;; a[999999999]=x のような添字で巨大なリストを作らせない。
-              (when (> key *max-param-index*)
-                (error 'http-parse-error
-                       :format-control "Parameter index ~a is too large!"
-                       :format-arguments (list key)))
               (let ((lack (1+ (- key (length params)))))
                 (when (plusp lack)
+                  ;; 飛んだ添字を埋める分も、末尾に足す分も数える。
+                  (count-param-elements lack)
                   (setf params (nconc params (make-list lack))))
                 (setf (nth key params) (%%prepare-params (cdr ks) v (nth key params)))
                 params))
@@ -204,8 +224,7 @@
               when name
                 do (setf params
                          (%%prepare-params
-                          (mapcar (lambda (x) (string-right-trim "]" x))
-                                  (split-sequence:split-sequence #\[ name))
+                          (param-keys name)
                           (let ((contents (rfc2388:mime-part-contents part)))
                             (if (pathnamep contents)
                                 (progn
